@@ -17,31 +17,26 @@ export class Rasterize extends BaseNode {
     const canvas = new OffscreenCanvas(vector.width, vector.height);
     const ctx    = canvas.getContext('2d');
 
-    // White background
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle   = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw each line as a polyline
     ctx.strokeStyle = '#000000';
-    for (const line of vector.lines) {
-      const { points, style } = line;
-      if (!points || points.length < 2) continue;
 
+    for (const { points, style } of vector.lines) {
+      if (!points || points.length < 2) continue;
       ctx.lineWidth   = style.width   ?? 1;
       ctx.globalAlpha = style.opacity ?? 1;
-
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i].x, points[i].y);
-      }
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
       ctx.stroke();
     }
 
     ctx.globalAlpha = 1;
-
-    const imageData    = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const imageData     = ctx.getImageData(0, 0, canvas.width, canvas.height);
     imageData._portType = 'rgba_rasterimage';
+    // Propagate physical size from the vector if it was tagged upstream.
+    if (vector._widthCm)  imageData._widthCm  = vector._widthCm;
+    if (vector._heightCm) imageData._heightCm = vector._heightCm;
     this._setOutput('image', imageData);
   }
 }

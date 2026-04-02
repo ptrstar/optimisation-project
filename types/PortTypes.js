@@ -1,13 +1,14 @@
 export const PortTypes = {
-  RGBA_RASTERIMAGE: 'rgba_rasterimage',
-  GS_RASTERIMAGE:   'gs_rasterimage',
-  POINT:            'point',
-  LINE:             'line',
-  VECTORIMAGE:      'vectorimage',
-  SCALAR:           'scalar',
-  BOOLEAN:          'boolean',
-  COLOR:            'color',
-  STROKE_STYLE:     'stroke_style',
+  RGBA_RASTERIMAGE: 'rgba_rasterimage', // ImageData tagged ._portType = 'rgba_rasterimage'
+  GS_RASTERIMAGE:   'gs_rasterimage',   // ImageData tagged ._portType = 'gs_rasterimage'
+  POINT:            'point',            // { x: Number, y: Number }
+  LINE:             'line',             // Array<point>  — ordered polyline
+  VECTORIMAGE:      'vectorimage',      // VectorImage instance
+  SCALAR:           'scalar',           // Number
+  BOOLEAN:          'boolean',          // Boolean
+  COLOR:            'color',            // { r, g, b, a }  each 0–255
+  STROKE_STYLE:     'stroke_style',     // { color: Color, width: Number, opacity: Number 0–1 }
+  CANVAS_CONFIG:    'canvas_config',    // { widthCm, heightCm, ppcm, penWidthMm, penWidthPx, widthPx, heightPx }
 };
 
 export const PORT_COLORS = {
@@ -20,6 +21,7 @@ export const PORT_COLORS = {
   boolean:          '#ef4444',
   color:            '#ec4899',
   stroke_style:     '#14b8a6',
+  canvas_config:    '#06b6d4',
 };
 
 // Runtime validators — vectorimage uses duck-typing to avoid circular imports
@@ -33,7 +35,9 @@ const validators = {
   boolean:          v => typeof v === 'boolean',
   color:            v => v != null && ['r', 'g', 'b', 'a'].every(k => typeof v[k] === 'number'),
   stroke_style:     v => v != null && v.color != null && ['r', 'g', 'b', 'a'].every(k => typeof v.color[k] === 'number')
-                         && typeof v.width === 'number' && typeof v.opacity === 'number',
+                      && typeof v.width === 'number' && typeof v.opacity === 'number',
+  canvas_config:    v => v != null && typeof v.widthPx === 'number'
+                      && typeof v.heightPx === 'number' && typeof v.penWidthPx === 'number',
 };
 
 // One-directional implicit compatibility: gs_rasterimage can flow into rgba_rasterimage inputs
@@ -69,7 +73,8 @@ export function getValueType(value) {
   if (typeof value === 'number') return 'scalar';
   if (Array.isArray(value) && value.length > 0 && value[0] != null && typeof value[0].x === 'number') return 'line';
   if (value != null && typeof value.x === 'number' && typeof value.y === 'number') return 'point';
-  if (value != null && typeof value.r === 'number' && typeof value.g === 'number' && typeof value.b === 'number' && typeof value.a === 'number') return 'color';
+  if (value != null && typeof value.r === 'number' && typeof value.g === 'number' && typeof value.b === 'number') return 'color';
+  if (value != null && typeof value.penWidthPx === 'number') return 'canvas_config';
   if (value != null && value.color != null && typeof value.width === 'number' && typeof value.opacity === 'number') return 'stroke_style';
   return null;
 }

@@ -29,4 +29,8 @@ export class BaseNode {
   getOutput(portName) {
     return this.outputs[portName];
   }
+
+  // Subclasses with configurable params implement these for serialisation.
+  getParams() { return {}; }
+  setParams(/* params */) {}
 }

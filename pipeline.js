@@ -26,6 +26,16 @@ export class Pipeline {
     return this.widgets.find(w => w.node === node) ?? null;
   }
 
+  clear() {
+    for (const widget of this.widgets) {
+      if (widget.el) widget.el.remove();
+    }
+    this.nodes   = [];
+    this.edges   = [];
+    this.widgets = [];
+    this.drawEdges();
+  }
+
   removeNode(node) {
     this.edges = this.edges.filter(e => e.fromNode !== node && e.toNode !== node);
     const widget = this.getWidget(node);

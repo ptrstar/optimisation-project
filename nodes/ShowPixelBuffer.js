@@ -4,7 +4,6 @@ import { PortTypes } from '../types/PortTypes.js';
 export class ShowPixelBuffer extends BaseNode {
   constructor(id) {
     super(id);
-    // Accepts gs_rasterimage too via the compatibility rule in Pipeline.connect
     this.inputSchema  = { image: PortTypes.RGBA_RASTERIMAGE };
     this.outputSchema = {};
     this.inputs       = { image: null };
@@ -18,7 +17,16 @@ export class ShowPixelBuffer extends BaseNode {
 
     this.previewCanvas.width  = img.width;
     this.previewCanvas.height = img.height;
-    const ctx = this.previewCanvas.getContext('2d');
-    ctx.putImageData(img, 0, 0);
+    this.previewCanvas.getContext('2d').putImageData(img, 0, 0);
+
+    // If physical dimensions were tagged upstream, display at real-world CSS cm size.
+    // CSS 1cm = 96px/2.54 by spec — matches the browser reference pixel.
+    if (img._widthCm && img._heightCm) {
+      this.previewCanvas.style.width  = `${img._widthCm}cm`;
+      this.previewCanvas.style.height = `${img._heightCm}cm`;
+    } else {
+      this.previewCanvas.style.width  = '';
+      this.previewCanvas.style.height = '';
+    }
   }
 }

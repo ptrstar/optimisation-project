@@ -12,19 +12,21 @@ No build step. Plain HTML/CSS/JS (ES modules). Tailwind via CDN. No npm dependen
 
 ```
 index.html          — entry point: dot-grid background, sidebar + graph area
-main.js             — wires up palette, run button, drag-to-connect, event listeners
+main.js             — palette, run button, presets, drag-to-connect, event listeners
 pipeline.js         — Pipeline: owns nodes/edges/widgets, topo-sort execution, edge drawing
+pipelines.js        — encodePipeline(), loadPreset(), PRESETS array
 widgets.js          — NodeWidget: DOM card per node, port dots, node-specific UI
 types/
   PortTypes.js      — type constants, PORT_COLORS, validators, checkType/assertType/isCompatible/getValueType
 nodes/
-  BaseNode.js       — abstract base (inputSchema, outputSchema, setInput, _setOutput, run)
+  BaseNode.js       — abstract base; also defines getParams()/setParams() stubs
+  CanvasSetup.js    — physical canvas dimensions + pen config → canvas_config
   ImageUploader.js
   Grayscale.js
   Contrast.js
   ShowPixelBuffer.js
-  PixelToVector.js  — raster → VectorImage (optimisation stub)
-  Rasterize.js      — VectorImage → raster
+  PixelToVector.js  — hill-climbing optimisation: gs_rasterimage → vectorimage
+  Rasterize.js      — vectorimage → rgba_rasterimage
   ImageDiff.js      — fitness function
 formats/
   VectorImage.js    — VectorImage class
@@ -47,8 +49,9 @@ Defined in `types/PortTypes.js`. All type strings are constants on `PortTypes`.
 | `BOOLEAN` | `'boolean'` | `Boolean` |
 | `COLOR` | `'color'` | `{ r, g, b, a }` each 0–255 |
 | `STROKE_STYLE` | `'stroke_style'` | `{ color: Color, width: Number, opacity: Number }` |
+| `CANVAS_CONFIG` | `'canvas_config'` | `{ widthCm, heightCm, dpi, ppcm, penWidthMm, penWidthPx, widthPx, heightPx }` |
 
-**Compatibility:** `gs_rasterimage → rgba_rasterimage` is allowed one-way (checked via `isCompatible`). All other type mismatches throw at connect time.
+**Compatibility:** `gs_rasterimage → rgba_rasterimage` is allowed one-way. All other type mismatches throw at connect time.
 
 **Tagging raster images:** every node that produces an `ImageData` must set `._portType` before calling `_setOutput`.
 
@@ -61,31 +64,36 @@ Defined in `types/PortTypes.js`. All type strings are constants on `PortTypes`.
 ### `BaseNode`
 
 - `inputSchema` / `outputSchema` — `{ portName: PortType }`, declared by each subclass constructor
-- `inputs` / `outputs` — `{ portName: value | null }`, initialised to `null` by subclass
-- `setInput(port, value)` — assigns directly, no type check (type safety is at connect-time)
-- `_setOutput(port, value)` — validates with `assertType` then assigns; subclasses always use this
-- `run()` — throws; must be overridden
+- `inputs` / `outputs` — `{ portName: value | null }`, initialised by subclass
+- `setInput(port, value)` — plain assignment, no type check (safety is at connect-time)
+- `_setOutput(port, value)` — validates with `assertType` then assigns
+- `run()` — throws; must be overridden. May be `async`.
+- `getParams()` — returns a plain object of serialisable config; default `{}`
+- `setParams(p)` — restores config from a plain object; default no-op
 
 ### Node Specifications
 
 | Node | inputs | outputs | Notes |
 |---|---|---|---|
-| `ImageUploader` | — | `image: rgba_rasterimage` | `loadFile(file)` decodes via `OffscreenCanvas`, tags and `_setOutput`s |
-| `Grayscale` | `image: rgba_rasterimage` | `image: gs_rasterimage` | `lum = 0.299R + 0.587G + 0.114B`, stores as RGBA with R=G=B=lum |
-| `Contrast` | `image: rgba_rasterimage`, `amount: scalar` | `image: rgba_rasterimage` | `(px−128)×amount+128`, clamp; `amount` defaults to `1.0` |
-| `ShowPixelBuffer` | `image: rgba_rasterimage` | — | Writes to `this.previewCanvas` (set by widget); accepts `gs_rasterimage` via compat |
-| `PixelToVector` | `image: gs_rasterimage` | `vector: vectorimage` | **Stub** — returns empty `VectorImage`. See optimisation contract below. |
-| `Rasterize` | `vector: vectorimage` | `image: rgba_rasterimage` | White canvas, black polyline strokes, exports `ImageData` |
-| `ImageDiff` | `imageA/imageB: rgba_rasterimage` | `diff: rgba_rasterimage`, `score: scalar` | Per-pixel MAE; `score` is the fitness function value |
+| `CanvasSetup` | — | `config: canvas_config` | User sets `widthCm`, `heightCm`, `dpi`, `penWidthMm`. Derives `ppcm = dpi/2.54`, `penWidthPx`, `widthPx`, `heightPx`. |
+| `ImageUploader` | — | `image: rgba_rasterimage` | `loadFile(file)` decodes via `OffscreenCanvas`, tags `._portType`. |
+| `Grayscale` | `image: rgba_rasterimage` | `image: gs_rasterimage` | `lum = 0.299R + 0.587G + 0.114B`, R=G=B=lum, A=255. |
+| `Contrast` | `image: rgba_rasterimage`, `amount: scalar` | `image: rgba_rasterimage` | `(px−128)×amount+128`, clamp. `amount` defaults to `1.0`. |
+| `ShowPixelBuffer` | `image: rgba_rasterimage`, `config: canvas_config` | — | Writes `ImageData` to `this.previewCanvas`. If `config` connected, sets CSS `width/height` in `cm` for real-world size. |
+| `PixelToVector` | `image: gs_rasterimage`, `config: canvas_config` | `vector: vectorimage` | Hill-climbing optimisation. See below. |
+| `Rasterize` | `vector: vectorimage`, `config: canvas_config` | `image: rgba_rasterimage` | White canvas, black polylines. Uses `config.penWidthPx` as default stroke width. |
+| `ImageDiff` | `imageA: rgba_rasterimage`, `imageB: rgba_rasterimage` | `diff: rgba_rasterimage`, `score: scalar` | Per-pixel MAE; `score` is the fitness value. |
 
-### `PixelToVector` optimisation contract
+### `PixelToVector` — optimisation
 
-```js
-// TODO: implement optimisation
-// Given: this.inputs.image (gs_rasterimage)
-// Produce: a VectorImage whose rasterisation minimises the score from ImageDiff
-// Return via: this._setOutput('vector', vector)
-```
+Hill-climbing over random line candidates. On each iteration a random line is proposed; if rasterising it reduces the MAE score against the target, it is kept.
+
+- **`config` input (optional):** if connected, the target is resized to `config.widthPx × config.heightPx` before optimising, and `config.penWidthPx` is used as the fixed line width. This ensures the optimisation operates at physically-correct resolution with the actual pen nib size.
+- **`this.iterations`** — number of hill-climbing attempts (default 300, exposed as a number input in the widget).
+- **`this.onProgress(pct, score)`** — called every 20 iterations; wired by the widget to drive the progress bar.
+- **`this.onPreview(gsPixels, w, h)`** — called every 100 iterations with a `Uint8Array` of single-channel luminance; wired by the widget to render a live preview canvas inside the card.
+- Lines use a fixed width (`penWidthPx`), random angle/length (up to 40% of diagonal), and slightly varying opacity (0.6–1.0) to simulate ink pressure.
+- Scores both sides as single-channel greyscale (R only) — no per-channel overhead.
 
 ---
 
@@ -98,7 +106,7 @@ VectorImage { width, height, lines: Array<{ points: Array<{x,y}>, style: { width
 - `addLine(points, style={})` — pushes a stroke
 - `clone()` — deep copy
 
-`point`, `line` (= `Array<point>`), and `vectorimage` map directly to the port types of the same name.
+`point`, `line`, and `vectorimage` map directly to the port types of the same name.
 
 ---
 
@@ -106,38 +114,86 @@ VectorImage { width, height, lines: Array<{ points: Array<{x,y}>, style: { width
 
 Each node gets one `NodeWidget`. Key responsibilities:
 
-- **Card DOM** — `position:absolute`, draggable via header. Header has a trash icon (top-right) that fires `node-remove` (bubbles).
-- **Port dots** — coloured circles on left (inputs) / right (outputs) edges. Attributes: `data-direction`, `data-port`, `data-type`, `data-node-id`. Right-click fires `port-disconnect` (bubbles).
-- **`getPortPosition(direction, port)`** — returns `{x, y}` of dot centre relative to the graph container (used by `pipeline.drawEdges`).
-- **`update()`** — called after `run()` to refresh in-card displays (uploader preview, diff canvas + score).
-- **`_renderPreview(canvas, imageData, maxW=180, maxH=160)`** — sets canvas pixel dims to image size, then sets CSS `width`/`height` to an aspect-ratio-correct display size capped at `maxW×maxH`.
+- **Card DOM** — `position:absolute`, draggable via header.
+- **Header** — amber pulsing dot (running indicator), node label, ▶ run-single button, 🗑 trash button.
+  - ▶ fires `node-run-single` (bubbles)
+  - 🗑 fires `node-remove` (bubbles)
+- **Port dots** — coloured circles on card edges. Right-click fires `port-disconnect` (bubbles).
+- **`setRunning(bool)`** — shows/hides pulsing dot; for `PixelToVector` also shows/hides the progress bar and live preview.
+- **`update()`** — refreshes in-card displays after `run()` (uploader preview, diff canvas + score).
+- **`_renderPreview(canvas, imageData, maxW, maxH)`** — aspect-correct display sizing.
+- **`updateProgress(pct, score)`** — drives progress bar and score label on `PixelToVector`.
+- **`updatePtvPreview(gsPixels, w, h)`** — converts single-channel `Uint8Array` to RGBA and paints the live preview canvas on `PixelToVector`.
 
 Node-specific content:
-- `ImageUploader` — file input + preview canvas (shown after load)
-- `Contrast` — range slider `[0–3]`, live label
-- `ShowPixelBuffer` — canvas element wired to `node.previewCanvas`
-- `ImageDiff` — score label + diff canvas
-- `PixelToVector` — italic "Optimisation stub" label
+- `CanvasSetup` — number inputs for `widthCm`, `heightCm`, `dpi`, `penWidthMm`; live derived info line (`WxH px · pen Xpx`).
+- `ImageUploader` — file input + aspect-correct preview canvas.
+- `Contrast` — range slider `[0–3]`, live label. Fires `node-param-changed` on input.
+- `ShowPixelBuffer` — scrollable container (max 320×320px) with canvas. When `config` is wired, canvas CSS size is set to `Xcm × Ycm` for a physical-size preview.
+- `PixelToVector` — iterations number input; progress bar + score (shown while running); live preview canvas (shown every 100 iterations, hidden when done).
+- `ImageDiff` — score label + diff canvas.
 
 ---
 
 ## `pipeline.js` — `Pipeline`
 
 - `addNode(node, x, y)` — creates widget, mounts to graph
-- `connect(fromNode, fromPort, toNode, toPort)` — type-checks with `isCompatible`, replaces any existing edge on the same input port, redraws
-- `removeNode(node)` — removes node, all edges touching it, and the widget DOM element
-- `disconnectPort(node, port, direction)` — removes edges on that port; nulls `node.inputs[port]` for input ports
-- `run()` — DFS topological sort, propagates outputs → inputs along edges, calls `node.run()`, calls `widget.update()`
-- `drawEdges(tempLine?)` — resizes canvas to graph size, draws colour-coded cubic beziers per edge (colour from `PORT_COLORS[outType]`); if `tempLine` is given draws a dashed drag preview
+- `connect(fromNode, fromPort, toNode, toPort)` — type-checks, replaces existing edge on same input port, redraws
+- `removeNode(node)` — removes node, all its edges, and its widget DOM element
+- `disconnectPort(node, port, direction)` — removes edges on that port; nulls input value for input ports
+- `clear()` — removes all nodes, edges, and widgets
+- `run()` — async, full topo-sort execution
+- `runFrom(startNode)` — async; feeds cached upstream outputs into `startNode`, then runs `startNode` + all downstream nodes without re-running upstream
+- `drawEdges(tempLine?)` — colour-coded cubic beziers; dashed drag-preview if `tempLine` given
+
+---
+
+## `pipelines.js` — Serialisation & Presets
+
+### Adding a new node type
+
+1. Import the class in `pipelines.js` and add it to `NODE_CLASSES`.
+2. Implement `getParams()` / `setParams(p)` on the node class for any configurable state.
+3. That's it — `encodePipeline` and `loadPreset` are fully generic.
+
+### `encodePipeline(pipeline)`
+
+Returns a plain JSON-safe object:
+```js
+{
+  nodes: [{ id, type, x, y, params }],  // type = constructor.name
+  edges: [{ from, fromPort, to, toPort }]
+}
+```
+
+### `loadPreset(pipeline, preset)`
+
+Calls `pipeline.clear()`, reconstructs nodes via `NODE_CLASSES[spec.type]`, calls `node.setParams(spec.params)`, then reconnects edges. Returns the highest numeric node-id suffix so `main.js` can advance `nodeCounter`.
+
+### Sidebar
+
+- **Export to Console** button — calls `encodePipeline`, logs JSON, shows toast. Copy-paste into `PRESETS` in `pipelines.js` to save a preset.
+- **Presets** section — one button per entry in `PRESETS`; click loads that preset.
+
+### Adding a preset
+
+Add an entry to the `PRESETS` array in `pipelines.js`:
+```js
+{ name: 'My Preset', pipeline: { nodes: [...], edges: [...] } }
+```
+The easiest way to author one is to build the pipeline in the UI and click "Export to Console".
 
 ---
 
 ## `main.js` — Event wiring
 
-- Sidebar palette: one button per node type; click → `new cls(id)`, `pipeline.addNode`
-- Run button → `pipeline.run()`, toast on error
-- **Drag-to-connect:** `mousedown` on `.port-dot[data-direction=output]` → track `pendingConn`; `mousemove` → `pipeline.drawEdges(tempLine)`; `mouseup` → `elementFromPoint` to find target input dot → `pipeline.connect`, toast result
-- `node-remove` on graphEl → `pipeline.removeNode(e.detail.node)`
-- `port-disconnect` on graphEl → `pipeline.disconnectPort(e.detail.node, e.detail.port, e.detail.direction)`
-- `node-updated` on graphEl → auto-run pipeline (fired by ImageUploader after file load)
-- `resize` → `pipeline.drawEdges()`
+- Palette buttons → `new cls(id)`, `pipeline.addNode`
+- Run button → `pipeline.run()` (async, guarded by `isRunning`)
+- Export button → `encodePipeline`, `console.log`
+- Preset buttons → `loadPreset(pipeline, preset.pipeline)`
+- `node-run-single` → `pipeline.runFrom(node)` (blocked while running)
+- `node-updated` → `tryAutoRun()` (fired by ImageUploader after file load)
+- `node-param-changed` → `tryAutoRun()` (fired by Contrast slider, CanvasSetup inputs)
+- `node-remove` → `pipeline.removeNode(node)`
+- `port-disconnect` → `pipeline.disconnectPort(node, port, direction)`
+- Auto-run toggle (on by default) — `tryAutoRun()` skips if `pipeline.isRunning`

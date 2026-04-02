@@ -25,6 +25,8 @@ export class Grayscale extends BaseNode {
 
     const out       = new ImageData(data, src.width, src.height);
     out._portType   = 'gs_rasterimage';
+    if (src._widthCm)  out._widthCm  = src._widthCm;
+    if (src._heightCm) out._heightCm = src._heightCm;
     this._setOutput('image', out);
   }
 }

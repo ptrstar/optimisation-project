@@ -144,6 +144,7 @@ export class NodeWidget {
 
   _buildContent() {
     switch (this.node.constructor.name) {
+      case 'CanvasSetup':     return this._buildCanvasSetupContent();
       case 'ImageUploader':   return this._buildImageUploaderContent();
       case 'Contrast':        return this._buildContrastContent();
       case 'ShowPixelBuffer': return this._buildShowPixelBufferContent();
@@ -153,7 +154,65 @@ export class NodeWidget {
     }
   }
 
+  _buildCanvasSetupContent() {
+    const node = this.node;
+    const wrap = document.createElement('div');
+    wrap.className = 'px-3 py-2 flex flex-col gap-2 text-xs';
+
+    const row = (label, input) => {
+      const r = document.createElement('div');
+      r.className = 'flex items-center justify-between gap-2';
+      const l = document.createElement('span');
+      l.className = 'text-gray-400 flex-1 truncate';
+      l.textContent = label;
+      r.appendChild(l);
+      r.appendChild(input);
+      return r;
+    };
+
+    const numInput = (value, min, max, step, onChange) => {
+      const el = document.createElement('input');
+      el.type      = 'number';
+      el.min       = String(min);
+      el.max       = String(max);
+      el.step      = String(step);
+      el.value     = String(value);
+      el.className = 'w-20 text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
+      el.addEventListener('change', () => {
+        onChange(parseFloat(el.value));
+        el.dispatchEvent(new CustomEvent('node-param-changed', { bubbles: true, detail: { node } }));
+      });
+      return el;
+    };
+
+    this._csInfo = document.createElement('div');
+    this._csInfo.className = 'text-gray-300 font-mono text-center text-xs';
+    this._updateCanvasInfo();
+
+    const wInput   = numInput(node.widthCm,    1, 200, 0.5, v => { node.widthCm    = v; this._updateCanvasInfo(); });
+    const hInput   = numInput(node.heightCm,   1, 200, 0.5, v => { node.heightCm   = v; this._updateCanvasInfo(); });
+    const dpiInput = numInput(node.dpi,        36, 600, 1,  v => { node.dpi        = v; this._updateCanvasInfo(); });
+    const penInput = numInput(node.penWidthMm, 0.1, 5, 0.1, v => { node.penWidthMm = v; this._updateCanvasInfo(); });
+
+    wrap.appendChild(row('Width (cm)',      wInput));
+    wrap.appendChild(row('Height (cm)',     hInput));
+    wrap.appendChild(row('DPI',             dpiInput));
+    wrap.appendChild(row('Pen width (mm)',  penInput));
+    wrap.appendChild(this._csInfo);
+    return wrap;
+  }
+
+  _updateCanvasInfo() {
+    if (!this._csInfo) return;
+    const n    = this.node;
+    const ppcm = n.dpi / 2.54;
+    const pw   = (n.penWidthMm * ppcm / 10).toFixed(2);
+    this._csInfo.textContent =
+      `${Math.round(n.widthCm * ppcm)} × ${Math.round(n.heightCm * ppcm)} px · pen ${pw}px`;
+  }
+
   _buildImageUploaderContent() {
+    const node = this.node;
     const wrap = document.createElement('div');
     wrap.className = 'px-3 py-2 flex flex-col gap-2';
 
@@ -161,6 +220,27 @@ export class NodeWidget {
     fileInput.type      = 'file';
     fileInput.accept    = 'image/*';
     fileInput.className = 'text-xs text-gray-500 w-full';
+
+    // Fit mode selector
+    const fitSelect = document.createElement('select');
+    fitSelect.className = 'text-xs border border-gray-200 rounded px-1 py-0.5 text-gray-600 w-full';
+    for (const [value, label] of [
+      ['fit',     'Fit (letterbox)'],
+      ['fill',    'Fill (crop overflow)'],
+      ['stretch', 'Stretch'],
+      ['crop',    'Crop (center, no scale)'],
+    ]) {
+      const opt = document.createElement('option');
+      opt.value = value; opt.textContent = label;
+      if (value === node.fitMode) opt.selected = true;
+      fitSelect.appendChild(opt);
+    }
+    fitSelect.addEventListener('change', () => {
+      node.fitMode = fitSelect.value;
+      node.run();
+      this._refreshUploaderPreview();
+      fitSelect.dispatchEvent(new CustomEvent('node-param-changed', { bubbles: true, detail: { node } }));
+    });
 
     const preview = document.createElement('canvas');
     preview.style.cssText = 'display:none; border-radius:4px; border:1px solid #e5e7eb;';
@@ -170,17 +250,23 @@ export class NodeWidget {
       const file = e.target.files?.[0];
       if (!file) return;
       try {
-        const imageData = await this.node.loadFile(file);
-        this._renderPreview(preview, imageData);
-        fileInput.dispatchEvent(new CustomEvent('node-updated', { bubbles: true, detail: { node: this.node } }));
+        await node.loadFile(file);
+        this._refreshUploaderPreview();
+        fileInput.dispatchEvent(new CustomEvent('node-updated', { bubbles: true, detail: { node } }));
       } catch (err) {
         console.error('Failed to load file:', err);
       }
     });
 
     wrap.appendChild(fileInput);
+    wrap.appendChild(fitSelect);
     wrap.appendChild(preview);
     return wrap;
+  }
+
+  _refreshUploaderPreview() {
+    const img = this.node.outputs.image;
+    if (img && this._uploaderPreview) this._renderPreview(this._uploaderPreview, img);
   }
 
   _buildContrastContent() {
@@ -212,15 +298,15 @@ export class NodeWidget {
   }
 
   _buildShowPixelBufferContent() {
-    const wrap = document.createElement('div');
-    wrap.className = 'px-3 py-2';
+    const scroll = document.createElement('div');
+    scroll.style.cssText = 'overflow:auto; max-width:300px; max-height:300px; margin:0 12px 8px; border-radius:4px; border:1px solid #e5e7eb;';
 
     const canvas = document.createElement('canvas');
-    canvas.style.cssText = 'max-width:100%; max-height:100px; border-radius:4px; display:block;';
+    canvas.style.cssText = 'display:block; image-rendering:pixelated;';
     this.node.previewCanvas = canvas;
 
-    wrap.appendChild(canvas);
-    return wrap;
+    scroll.appendChild(canvas);
+    return scroll;
   }
 
   _buildPixelToVectorContent() {
@@ -250,6 +336,29 @@ export class NodeWidget {
     iterRow.appendChild(iterInput);
     wrap.appendChild(iterRow);
 
+    // Pen width input
+    const penRow = document.createElement('div');
+    penRow.className = 'flex items-center gap-2';
+
+    const penLabel = document.createElement('span');
+    penLabel.className = 'text-xs text-gray-400 flex-1';
+    penLabel.textContent = 'Pen width (px)';
+
+    const penInput = document.createElement('input');
+    penInput.type      = 'number';
+    penInput.min       = '0.5';
+    penInput.max       = '20';
+    penInput.step      = '0.5';
+    penInput.value     = String(this.node.penWidthPx ?? 2);
+    penInput.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
+    penInput.addEventListener('change', () => {
+      this.node.penWidthPx = Math.max(0.5, parseFloat(penInput.value) || 2);
+    });
+
+    penRow.appendChild(penLabel);
+    penRow.appendChild(penInput);
+    wrap.appendChild(penRow);
+
     // Progress bar (hidden until running)
     const progressWrap = document.createElement('div');
     progressWrap.className = 'hidden flex flex-col gap-1';
@@ -274,10 +383,49 @@ export class NodeWidget {
 
     wrap.appendChild(progressWrap);
 
-    // Wire progress callback on the node
+    // Live preview canvas — shown during optimisation, hidden when idle
+    const previewWrap = document.createElement('div');
+    previewWrap.style.cssText = 'overflow:auto; max-width:280px; max-height:200px; border-radius:4px; border:1px solid #e5e7eb; display:none;';
+
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.style.cssText = 'display:block; image-rendering:pixelated;';
+    this._ptvPreviewCanvas = previewCanvas;
+    this._ptvPreviewWrap   = previewWrap;
+
+    previewWrap.appendChild(previewCanvas);
+    wrap.appendChild(previewWrap);
+
+    // Wire callbacks on the node
     this.node.onProgress = (pct, score) => this.updateProgress(pct, score);
+    this.node.onPreview  = (pixels, w, h) => this.updatePtvPreview(pixels, w, h);
 
     return wrap;
+  }
+
+  // Called by PixelToVector every 100 iterations with a greyscale Uint8Array.
+  updatePtvPreview(pixels, w, h) {
+    const canvas = this._ptvPreviewCanvas;
+    const wrap   = this._ptvPreviewWrap;
+    if (!canvas || !wrap) return;
+
+    // Show the container on first call
+    wrap.style.display = 'block';
+
+    canvas.width  = w;
+    canvas.height = h;
+
+    // Build RGBA ImageData from single-channel greyscale
+    const ctx  = canvas.getContext('2d');
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < pixels.length; i++) {
+      const v    = pixels[i];
+      const base = i * 4;
+      rgba[base]     = v;
+      rgba[base + 1] = v;
+      rgba[base + 2] = v;
+      rgba[base + 3] = 255;
+    }
+    ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
   }
 
   _buildImageDiffContent() {
@@ -307,8 +455,9 @@ export class NodeWidget {
     } else {
       this._runningIndicator.classList.add('hidden');
       this._runningIndicator.style.animation = 'none';
-      // Hide progress wrap if it was shown (PixelToVector)
       this._progressWrap?.classList.add('hidden');
+      // Hide live preview once done (final result is in the downstream ShowPixelBuffer)
+      if (this._ptvPreviewWrap) this._ptvPreviewWrap.style.display = 'none';
     }
 
     // Show/hide progress bar for PixelToVector
@@ -345,8 +494,7 @@ export class NodeWidget {
     const cls = this.node.constructor.name;
 
     if (cls === 'ImageUploader') {
-      const img = this.node.outputs.image;
-      if (img && this._uploaderPreview) this._renderPreview(this._uploaderPreview, img);
+      this._refreshUploaderPreview();
     }
 
     if (cls === 'ImageDiff') {

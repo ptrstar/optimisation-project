@@ -1,4 +1,5 @@
 import { Pipeline }        from './pipeline.js';
+import { PRESETS, encodePipeline, loadPreset } from './pipelines.js';
 import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
@@ -6,8 +7,10 @@ import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
 import { PixelToVector }   from './nodes/PixelToVector.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
+import { CanvasSetup }     from './nodes/CanvasSetup.js';
 
 const NODE_REGISTRY = [
+  { label: 'Canvas Setup',    cls: CanvasSetup     },
   { label: 'Image Uploader',  cls: ImageUploader   },
   { label: 'Grayscale',       cls: Grayscale        },
   { label: 'Contrast',        cls: Contrast         },
@@ -18,10 +21,12 @@ const NODE_REGISTRY = [
 ];
 
 // DOM refs
-const canvasEl  = document.getElementById('edges');
-const graphEl   = document.getElementById('graph');
-const paletteEl = document.getElementById('node-palette');
-const runBtn    = document.getElementById('run-btn');
+const canvasEl   = document.getElementById('edges');
+const graphEl    = document.getElementById('graph');
+const paletteEl  = document.getElementById('node-palette');
+const presetsEl  = document.getElementById('presets-list');
+const runBtn     = document.getElementById('run-btn');
+const exportBtn  = document.getElementById('export-btn');
 
 const pipeline = new Pipeline(canvasEl, graphEl);
 
@@ -41,7 +46,7 @@ function tryAutoRun() {
   pipeline.run().catch(err => console.error('Auto-run error:', err));
 }
 
-// ── Node palette ─────────────────────────────────────────────────────────────
+// ── Node counter (shared between manual add and preset load) ─────────────────
 let nodeCounter = 0;
 
 function nextPosition() {
@@ -51,6 +56,7 @@ function nextPosition() {
   return { x: 40 + col * 260, y: 40 + row * 180 };
 }
 
+// ── Node palette ─────────────────────────────────────────────────────────────
 for (const entry of NODE_REGISTRY) {
   const btn = document.createElement('button');
   btn.className = 'w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-blue-700 text-gray-600 transition-colors flex items-center gap-2';
@@ -66,6 +72,28 @@ for (const entry of NODE_REGISTRY) {
 
   paletteEl.appendChild(btn);
 }
+
+// ── Presets ───────────────────────────────────────────────────────────────────
+for (const preset of PRESETS) {
+  const btn = document.createElement('button');
+  btn.className = 'w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-violet-50 hover:text-violet-700 text-gray-500 transition-colors flex items-center gap-2';
+  btn.innerHTML = `<span class="text-gray-300">↺</span><span>${preset.name}</span>`;
+
+  btn.addEventListener('click', () => {
+    const maxNum = loadPreset(pipeline, preset.pipeline);
+    nodeCounter  = maxNum + 1;
+    pipeline.drawEdges();
+  });
+
+  presetsEl.appendChild(btn);
+}
+
+// ── Export button ────────────────────────────────────────────────────────────
+exportBtn.addEventListener('click', () => {
+  const encoded = encodePipeline(pipeline);
+  console.log(JSON.stringify(encoded, null, 2));
+  showToast('Pipeline JSON logged to console', 'info');
+});
 
 // ── Run button ───────────────────────────────────────────────────────────────
 runBtn.addEventListener('click', async () => {
@@ -152,21 +180,11 @@ document.addEventListener('mouseup', (e) => {
 
 // ── Pipeline events ──────────────────────────────────────────────────────────
 
-// Auto-run after image upload
-graphEl.addEventListener('node-updated', () => tryAutoRun());
-
-// Auto-run after any parameter change (e.g. Contrast slider)
+graphEl.addEventListener('node-updated',      () => tryAutoRun());
 graphEl.addEventListener('node-param-changed', () => tryAutoRun());
-
-// Remove node
-graphEl.addEventListener('node-remove', (e) => {
-  pipeline.removeNode(e.detail.node);
-});
-
-// Right-click disconnect
+graphEl.addEventListener('node-remove', (e)   => pipeline.removeNode(e.detail.node));
 graphEl.addEventListener('port-disconnect', (e) => {
-  const { node, port, direction } = e.detail;
-  pipeline.disconnectPort(node, port, direction);
+  pipeline.disconnectPort(e.detail.node, e.detail.port, e.detail.direction);
 });
 
 window.addEventListener('resize', () => pipeline.drawEdges());

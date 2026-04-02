@@ -20,11 +20,15 @@ export class Contrast extends BaseNode {
       data[i]     = Math.min(255, Math.max(0, (data[i]     - 128) * amount + 128));
       data[i + 1] = Math.min(255, Math.max(0, (data[i + 1] - 128) * amount + 128));
       data[i + 2] = Math.min(255, Math.max(0, (data[i + 2] - 128) * amount + 128));
-      // Alpha unchanged
     }
 
     const out     = new ImageData(data, src.width, src.height);
     out._portType = 'rgba_rasterimage';
+    if (src._widthCm)  out._widthCm  = src._widthCm;
+    if (src._heightCm) out._heightCm = src._heightCm;
     this._setOutput('image', out);
   }
+
+  getParams() { return { amount: this.inputs.amount ?? 1.0 }; }
+  setParams(p) { if (p.amount != null) this.inputs.amount = p.amount; }
 }
