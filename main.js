@@ -8,13 +8,13 @@ import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 
 const NODE_REGISTRY = [
-  { label: 'Image Uploader',   cls: ImageUploader,   icon: '+'  },
-  { label: 'Grayscale',        cls: Grayscale,        icon: '+'  },
-  { label: 'Contrast',         cls: Contrast,         icon: '+' },
-  { label: 'Show Buffer',      cls: ShowPixelBuffer,  icon: '+' },
-  { label: 'Pixel to Vector',  cls: PixelToVector,    icon: '+'  },
-  { label: 'Rasterize',        cls: Rasterize,        icon: '+' },
-  { label: 'Image Diff',       cls: ImageDiff,        icon: '+'  },
+  { label: 'Image Uploader',  cls: ImageUploader   },
+  { label: 'Grayscale',       cls: Grayscale        },
+  { label: 'Contrast',        cls: Contrast         },
+  { label: 'Show Buffer',     cls: ShowPixelBuffer  },
+  { label: 'Pixel to Vector', cls: PixelToVector    },
+  { label: 'Rasterize',       cls: Rasterize        },
+  { label: 'Image Diff',      cls: ImageDiff        },
 ];
 
 // DOM refs
@@ -25,6 +25,23 @@ const runBtn    = document.getElementById('run-btn');
 
 const pipeline = new Pipeline(canvasEl, graphEl);
 
+// ── Auto-run toggle ──────────────────────────────────────────────────────────
+let autoRun = true;
+
+const autoRunToggle = document.getElementById('auto-run-toggle');
+const autoRunLabel  = document.getElementById('auto-run-label');
+
+autoRunToggle.addEventListener('change', () => {
+  autoRun = autoRunToggle.checked;
+  autoRunLabel.textContent = autoRun ? 'Auto-run on' : 'Auto-run off';
+});
+
+function tryAutoRun() {
+  if (!autoRun || pipeline.isRunning) return;
+  pipeline.run().catch(err => console.error('Auto-run error:', err));
+}
+
+// ── Node palette ─────────────────────────────────────────────────────────────
 let nodeCounter = 0;
 
 function nextPosition() {
@@ -34,11 +51,10 @@ function nextPosition() {
   return { x: 40 + col * 260, y: 40 + row * 180 };
 }
 
-// Build sidebar palette
 for (const entry of NODE_REGISTRY) {
   const btn = document.createElement('button');
   btn.className = 'w-full text-left text-xs px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-blue-700 text-gray-600 transition-colors flex items-center gap-2';
-  btn.innerHTML = `<span>${entry.icon}</span><span>${entry.label}</span>`;
+  btn.innerHTML = `<span class="text-gray-300 font-bold">+</span><span>${entry.label}</span>`;
 
   btn.addEventListener('click', () => {
     const { x, y } = nextPosition();
@@ -51,18 +67,33 @@ for (const entry of NODE_REGISTRY) {
   paletteEl.appendChild(btn);
 }
 
-// Run button
-runBtn.addEventListener('click', () => {
+// ── Run button ───────────────────────────────────────────────────────────────
+runBtn.addEventListener('click', async () => {
+  if (pipeline.isRunning) return;
   try {
-    pipeline.run();
-    showToast('Pipeline ran successfully', 'success');
+    await pipeline.run();
+    showToast('Pipeline complete', 'success');
   } catch (err) {
     console.error(err);
     showToast(err.message, 'error');
   }
 });
 
-// Connection drag state
+// ── Per-node run button ──────────────────────────────────────────────────────
+graphEl.addEventListener('node-run-single', async (e) => {
+  if (pipeline.isRunning) {
+    showToast('Pipeline is already running', 'info');
+    return;
+  }
+  try {
+    await pipeline.runFrom(e.detail.node);
+  } catch (err) {
+    console.error(err);
+    showToast(err.message, 'error');
+  }
+});
+
+// ── Connection drag ──────────────────────────────────────────────────────────
 let pendingConn = null;
 
 graphEl.addEventListener('mousedown', (e) => {
@@ -96,8 +127,8 @@ document.addEventListener('mousemove', (e) => {
 
 document.addEventListener('mouseup', (e) => {
   if (!pendingConn) return;
-  const prev     = pendingConn;
-  pendingConn    = null;
+  const prev  = pendingConn;
+  pendingConn = null;
 
   const dot = document.elementFromPoint(e.clientX, e.clientY)?.closest('.port-dot');
   if (dot && dot.dataset.direction === 'input') {
@@ -119,21 +150,20 @@ document.addEventListener('mouseup', (e) => {
   pipeline.drawEdges();
 });
 
-// Auto-run pipeline when a node updates (e.g. image loaded)
-graphEl.addEventListener('node-updated', () => {
-  try {
-    pipeline.run();
-  } catch (e) {
-    // Silent — user can manually run or check errors via run button
-  }
-});
+// ── Pipeline events ──────────────────────────────────────────────────────────
 
-// Remove node when trash icon is clicked
+// Auto-run after image upload
+graphEl.addEventListener('node-updated', () => tryAutoRun());
+
+// Auto-run after any parameter change (e.g. Contrast slider)
+graphEl.addEventListener('node-param-changed', () => tryAutoRun());
+
+// Remove node
 graphEl.addEventListener('node-remove', (e) => {
   pipeline.removeNode(e.detail.node);
 });
 
-// Right-click on a port dot disconnects it
+// Right-click disconnect
 graphEl.addEventListener('port-disconnect', (e) => {
   const { node, port, direction } = e.detail;
   pipeline.disconnectPort(node, port, direction);
@@ -141,25 +171,17 @@ graphEl.addEventListener('port-disconnect', (e) => {
 
 window.addEventListener('resize', () => pipeline.drawEdges());
 
-// Toast notification
+// ── Toast ────────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
   const toast    = document.getElementById('toast');
   const inner    = toast.querySelector('div');
-  const colorMap = {
-    success: 'bg-green-500',
-    error:   'bg-red-500',
-    info:    'bg-gray-700',
-  };
+  const colorMap = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-gray-700' };
 
-  // Remove old color classes
   inner.classList.remove('bg-green-500', 'bg-red-500', 'bg-gray-700');
   inner.classList.add(colorMap[type] ?? 'bg-gray-700');
   inner.textContent = msg;
-
   toast.classList.remove('hidden');
 
   clearTimeout(toast._hideTimer);
-  toast._hideTimer = setTimeout(() => {
-    toast.classList.add('hidden');
-  }, 3000);
+  toast._hideTimer = setTimeout(() => toast.classList.add('hidden'), 3000);
 }

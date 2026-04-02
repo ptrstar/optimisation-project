@@ -7,6 +7,7 @@ export class NodeWidget {
     this.y         = y;
     this._portDots = {};
     this.el        = null;
+    this._runningIndicator = null;
   }
 
   mount(container) {
@@ -14,19 +15,40 @@ export class NodeWidget {
     card.style.cssText = `position:absolute; left:${this.x}px; top:${this.y}px; min-width:200px; z-index:10; overflow:visible;`;
     card.className = 'bg-white rounded-xl shadow-md border border-gray-200 select-none';
 
-    // Header
+    // ── Header ──────────────────────────────────────────────────────────────
     const header = document.createElement('div');
-    header.className = 'px-3 py-2 bg-gray-100 rounded-t-xl border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-move flex items-center justify-between';
+    header.className = 'px-3 py-2 bg-gray-100 rounded-t-xl border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-move flex items-center gap-2';
+
+    // Running indicator dot (hidden by default)
+    const runningDot = document.createElement('span');
+    runningDot.className = 'w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 hidden';
+    runningDot.style.animation = 'none';
+    this._runningIndicator = runningDot;
+    header.appendChild(runningDot);
 
     const headerLabel = document.createElement('span');
+    headerLabel.className = 'flex-1 truncate';
     headerLabel.textContent = this.node.constructor.name.replace(/([A-Z])/g, ' $1').trim();
     header.appendChild(headerLabel);
 
+    // Per-node run button
+    const runBtn = document.createElement('button');
+    runBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    runBtn.className = 'text-gray-400 hover:text-blue-500 transition-colors cursor-pointer flex-shrink-0';
+    runBtn.title = 'Run from this node';
+    runBtn.addEventListener('mousedown', e => e.stopPropagation());
+    runBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      card.dispatchEvent(new CustomEvent('node-run-single', { bubbles: true, detail: { node: this.node } }));
+    });
+    header.appendChild(runBtn);
+
+    // Trash button
     const trashBtn = document.createElement('button');
-    trashBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
-    trashBtn.className = 'text-gray-400 hover:text-red-500 transition-colors cursor-pointer ml-2 flex-shrink-0';
+    trashBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+    trashBtn.className = 'text-gray-400 hover:text-red-500 transition-colors cursor-pointer flex-shrink-0';
     trashBtn.title = 'Remove node';
-    trashBtn.addEventListener('mousedown', e => e.stopPropagation()); // don't start drag
+    trashBtn.addEventListener('mousedown', e => e.stopPropagation());
     trashBtn.addEventListener('click', e => {
       e.stopPropagation();
       card.dispatchEvent(new CustomEvent('node-remove', { bubbles: true, detail: { node: this.node } }));
@@ -35,22 +57,17 @@ export class NodeWidget {
 
     card.appendChild(header);
 
-    // Body
+    // ── Body ────────────────────────────────────────────────────────────────
     const body = document.createElement('div');
     body.className = 'py-2';
 
-    // Ports row
     const portsRow = document.createElement('div');
     portsRow.style.cssText = 'display:flex; flex-direction:row; justify-content:space-between; overflow:visible;';
 
-    // Inputs column
     const inputsCol = document.createElement('div');
     inputsCol.style.cssText = 'display:flex; flex-direction:column; gap:4px; overflow:visible;';
 
-    const inputSchema  = this.node.inputSchema  || {};
-    const outputSchema = this.node.outputSchema || {};
-
-    for (const [portName, portType] of Object.entries(inputSchema)) {
+    for (const [portName, portType] of Object.entries(this.node.inputSchema || {})) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:4px; overflow:visible;';
 
@@ -66,11 +83,10 @@ export class NodeWidget {
       inputsCol.appendChild(row);
     }
 
-    // Outputs column
     const outputsCol = document.createElement('div');
     outputsCol.style.cssText = 'display:flex; flex-direction:column; gap:4px; align-items:flex-end; overflow:visible;';
 
-    for (const [portName, portType] of Object.entries(outputSchema)) {
+    for (const [portName, portType] of Object.entries(this.node.outputSchema || {})) {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; gap:4px; flex-direction:row-reverse; overflow:visible;';
 
@@ -90,7 +106,6 @@ export class NodeWidget {
     portsRow.appendChild(outputsCol);
     body.appendChild(portsRow);
 
-    // Node-specific content
     const content = this._buildContent();
     if (content) body.appendChild(content);
 
@@ -115,7 +130,6 @@ export class NodeWidget {
     const key = `${direction}:${portName}`;
     this._portDots[key] = dot;
 
-    // Right-click on any port disconnects all edges on that port
     dot.addEventListener('contextmenu', e => {
       e.preventDefault();
       e.stopPropagation();
@@ -129,20 +143,14 @@ export class NodeWidget {
   }
 
   _buildContent() {
-    const cls = this.node.constructor.name;
-
-    if (cls === 'ImageUploader') {
-      return this._buildImageUploaderContent();
-    } else if (cls === 'Contrast') {
-      return this._buildContrastContent();
-    } else if (cls === 'ShowPixelBuffer') {
-      return this._buildShowPixelBufferContent();
-    } else if (cls === 'PixelToVector') {
-      return this._buildPixelToVectorContent();
-    } else if (cls === 'ImageDiff') {
-      return this._buildImageDiffContent();
+    switch (this.node.constructor.name) {
+      case 'ImageUploader':   return this._buildImageUploaderContent();
+      case 'Contrast':        return this._buildContrastContent();
+      case 'ShowPixelBuffer': return this._buildShowPixelBufferContent();
+      case 'PixelToVector':   return this._buildPixelToVectorContent();
+      case 'ImageDiff':       return this._buildImageDiffContent();
+      default:                return null;
     }
-    return null;
   }
 
   _buildImageUploaderContent() {
@@ -150,8 +158,8 @@ export class NodeWidget {
     wrap.className = 'px-3 py-2 flex flex-col gap-2';
 
     const fileInput = document.createElement('input');
-    fileInput.type   = 'file';
-    fileInput.accept = 'image/*';
+    fileInput.type      = 'file';
+    fileInput.accept    = 'image/*';
     fileInput.className = 'text-xs text-gray-500 w-full';
 
     const preview = document.createElement('canvas');
@@ -184,17 +192,18 @@ export class NodeWidget {
     valueLabel.textContent = 'Amount: 1.00';
 
     const slider = document.createElement('input');
-    slider.type  = 'range';
-    slider.min   = '0';
-    slider.max   = '3';
-    slider.step  = '0.01';
-    slider.value = '1';
+    slider.type      = 'range';
+    slider.min       = '0';
+    slider.max       = '3';
+    slider.step      = '0.01';
+    slider.value     = '1';
     slider.className = 'w-full accent-blue-500';
 
     slider.addEventListener('input', () => {
       const val = parseFloat(slider.value);
       this.node.inputs.amount = val;
       valueLabel.textContent  = `Amount: ${val.toFixed(2)}`;
+      slider.dispatchEvent(new CustomEvent('node-param-changed', { bubbles: true, detail: { node: this.node } }));
     });
 
     wrap.appendChild(valueLabel);
@@ -215,10 +224,60 @@ export class NodeWidget {
   }
 
   _buildPixelToVectorContent() {
-    const div = document.createElement('div');
-    div.className = 'text-xs text-gray-400 italic px-3 py-1';
-    div.textContent = 'Optimisation stub';
-    return div;
+    const wrap = document.createElement('div');
+    wrap.className = 'px-3 py-2 flex flex-col gap-2';
+
+    // Iterations input
+    const iterRow = document.createElement('div');
+    iterRow.className = 'flex items-center gap-2';
+
+    const iterLabel = document.createElement('span');
+    iterLabel.className = 'text-xs text-gray-400 flex-1';
+    iterLabel.textContent = 'Iterations';
+
+    const iterInput = document.createElement('input');
+    iterInput.type      = 'number';
+    iterInput.min       = '10';
+    iterInput.max       = '5000';
+    iterInput.step      = '10';
+    iterInput.value     = String(this.node.iterations ?? 300);
+    iterInput.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
+    iterInput.addEventListener('change', () => {
+      this.node.iterations = Math.max(10, parseInt(iterInput.value) || 300);
+    });
+
+    iterRow.appendChild(iterLabel);
+    iterRow.appendChild(iterInput);
+    wrap.appendChild(iterRow);
+
+    // Progress bar (hidden until running)
+    const progressWrap = document.createElement('div');
+    progressWrap.className = 'hidden flex flex-col gap-1';
+    this._progressWrap = progressWrap;
+
+    const progressBg = document.createElement('div');
+    progressBg.className = 'w-full h-1.5 bg-gray-100 rounded-full overflow-hidden';
+
+    const progressBar = document.createElement('div');
+    progressBar.className = 'h-full bg-blue-500 rounded-full transition-all duration-100';
+    progressBar.style.width = '0%';
+    this._progressBar = progressBar;
+
+    progressBg.appendChild(progressBar);
+    progressWrap.appendChild(progressBg);
+
+    const scoreLabel = document.createElement('span');
+    scoreLabel.className = 'text-xs font-mono text-gray-400';
+    scoreLabel.textContent = 'Score: —';
+    this._ptv_scoreLabel = scoreLabel;
+    progressWrap.appendChild(scoreLabel);
+
+    wrap.appendChild(progressWrap);
+
+    // Wire progress callback on the node
+    this.node.onProgress = (pct, score) => this.updateProgress(pct, score);
+
+    return wrap;
   }
 
   _buildImageDiffContent() {
@@ -239,7 +298,35 @@ export class NodeWidget {
     return wrap;
   }
 
-  // Renders imageData into a canvas element, fitting within maxW×maxH while preserving aspect ratio.
+  // Show/hide the running indicator dot.
+  setRunning(running) {
+    if (!this._runningIndicator) return;
+    if (running) {
+      this._runningIndicator.classList.remove('hidden');
+      this._runningIndicator.style.animation = 'pulse-dot 0.8s ease-in-out infinite';
+    } else {
+      this._runningIndicator.classList.add('hidden');
+      this._runningIndicator.style.animation = 'none';
+      // Hide progress wrap if it was shown (PixelToVector)
+      this._progressWrap?.classList.add('hidden');
+    }
+
+    // Show/hide progress bar for PixelToVector
+    if (this.node.constructor.name === 'PixelToVector') {
+      if (running) {
+        this._progressWrap?.classList.remove('hidden');
+        if (this._progressBar) this._progressBar.style.width = '0%';
+      }
+    }
+  }
+
+  // Called by PixelToVector's onProgress callback.
+  updateProgress(pct, score) {
+    if (this._progressBar) this._progressBar.style.width = `${(pct * 100).toFixed(1)}%`;
+    if (this._ptv_scoreLabel) this._ptv_scoreLabel.textContent = `Score: ${score.toFixed(2)}`;
+  }
+
+  // Renders imageData into a canvas, fitting within maxW×maxH while preserving aspect ratio.
   _renderPreview(canvas, imageData, maxW = 180, maxH = 160) {
     const aspect = imageData.width / imageData.height;
     let dispW = maxW, dispH = maxW / aspect;
@@ -259,22 +346,17 @@ export class NodeWidget {
 
     if (cls === 'ImageUploader') {
       const img = this.node.outputs.image;
-      if (img && this._uploaderPreview) {
-        this._renderPreview(this._uploaderPreview, img);
-      }
+      if (img && this._uploaderPreview) this._renderPreview(this._uploaderPreview, img);
     }
 
     if (cls === 'ImageDiff') {
       const diff  = this.node.outputs.diff;
       const score = this.node.outputs.score;
-
       if (this._diffScoreLabel && score != null) {
         this._diffScoreLabel.textContent = `Score: ${score.toFixed(2)}`;
       }
       if (this._diffCanvas && diff) {
-        this._diffCanvas.width  = diff.width;
-        this._diffCanvas.height = diff.height;
-        this._diffCanvas.getContext('2d').putImageData(diff, 0, 0);
+        this._renderPreview(this._diffCanvas, diff, 180, 80);
       }
     }
   }
@@ -294,10 +376,7 @@ export class NodeWidget {
   }
 
   _makeDraggable(headerEl) {
-    let startMouseX = 0;
-    let startMouseY = 0;
-    let startX      = 0;
-    let startY      = 0;
+    let startMouseX = 0, startMouseY = 0, startX = 0, startY = 0;
 
     const onMouseMove = (e) => {
       this.x = startX + (e.clientX - startMouseX);
@@ -313,6 +392,8 @@ export class NodeWidget {
     };
 
     headerEl.addEventListener('mousedown', (e) => {
+      // Don't drag if clicking a button
+      if (e.target.closest('button')) return;
       startMouseX = e.clientX;
       startMouseY = e.clientY;
       startX      = this.x;

@@ -8,6 +8,11 @@
   <style>
     /* Ensure port dots never clip */
     #graph * { overflow: visible; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
   </style>
 </head>
 <body class="h-screen flex bg-gray-50 font-sans overflow-hidden">
@@ -35,6 +40,12 @@
         <span>▶</span>
         <span>Run Pipeline</span>
       </button>
+
+      <!-- Auto-run toggle -->
+      <label class="flex items-center gap-2 cursor-pointer select-none px-1">
+        <input id="auto-run-toggle" type="checkbox" checked class="w-3.5 h-3.5 accent-blue-500 cursor-pointer" />
+        <span id="auto-run-label" class="text-xs text-gray-400">Auto-run on</span>
+      </label>
     </div>
   </aside>
 

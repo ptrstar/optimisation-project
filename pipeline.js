@@ -3,12 +3,13 @@ import { NodeWidget } from './widgets.js';
 
 export class Pipeline {
   constructor(canvasEl, graphEl) {
-    this.canvas  = canvasEl;
-    this.graph   = graphEl;
-    this.ctx     = canvasEl.getContext('2d');
-    this.nodes   = [];
-    this.edges   = []; // { fromNode, fromPort, toNode, toPort }
-    this.widgets = [];
+    this.canvas    = canvasEl;
+    this.graph     = graphEl;
+    this.ctx       = canvasEl.getContext('2d');
+    this.nodes     = [];
+    this.edges     = []; // { fromNode, fromPort, toNode, toPort }
+    this.widgets   = [];
+    this.isRunning = false;
 
     graphEl.addEventListener('widget-moved', () => this.drawEdges());
   }
@@ -61,29 +62,53 @@ export class Pipeline {
     this.drawEdges();
   }
 
-  run() {
+  // Run the full pipeline from the beginning.
+  async run() {
     const sorted = this._topoSort();
+    await this._runNodes(sorted);
+  }
 
-    for (const node of sorted) {
-      // Propagate outputs from incoming edges into this node's inputs
-      for (const edge of this.edges) {
-        if (edge.toNode === node) {
-          const value = edge.fromNode.getOutput(edge.fromPort);
-          node.setInput(edge.toPort, value);
+  // Run startNode and all downstream nodes using cached upstream outputs (no upstream re-execution).
+  async runFrom(startNode) {
+    // Feed cached outputs from direct upstream into startNode's inputs without re-running them.
+    for (const edge of this.edges) {
+      if (edge.toNode === startNode) {
+        startNode.setInput(edge.toPort, edge.fromNode.getOutput(edge.fromPort));
+      }
+    }
+    const toRun = this._downstreamFrom(startNode);
+    await this._runNodes(toRun);
+  }
+
+  // Shared execution kernel: propagate, run, update for each node in order.
+  async _runNodes(nodes) {
+    this.isRunning = true;
+    try {
+      for (const node of nodes) {
+        // Propagate upstream cached outputs into this node's inputs.
+        for (const edge of this.edges) {
+          if (edge.toNode === node) {
+            node.setInput(edge.toPort, edge.fromNode.getOutput(edge.fromPort));
+          }
         }
-      }
 
-      try {
-        node.run();
-      } catch (err) {
-        throw new Error(`Node "${node.id}" failed: ${err.message}`);
+        const widget = this.getWidget(node);
+        if (widget) widget.setRunning(true);
+        try {
+          await node.run();
+        } catch (err) {
+          throw new Error(`Node "${node.id}" failed: ${err.message}`);
+        } finally {
+          if (widget) widget.setRunning(false);
+        }
+        if (widget) widget.update();
       }
-
-      const widget = this.getWidget(node);
-      if (widget) widget.update();
+    } finally {
+      this.isRunning = false;
     }
   }
 
+  // DFS topological sort (post-order).
   _topoSort() {
     const visited = new Set();
     const result  = [];
@@ -91,33 +116,38 @@ export class Pipeline {
     const visit = (node) => {
       if (visited.has(node)) return;
       visited.add(node);
-
-      // Visit all nodes that feed into this node first
       for (const edge of this.edges) {
-        if (edge.toNode === node) {
-          visit(edge.fromNode);
-        }
+        if (edge.toNode === node) visit(edge.fromNode);
       }
-
       result.push(node);
     };
 
-    for (const node of this.nodes) {
-      visit(node);
-    }
-
+    for (const node of this.nodes) visit(node);
     return result;
   }
 
+  // Returns startNode + all nodes reachable downstream, in topo order.
+  _downstreamFrom(startNode) {
+    const allSorted = this._topoSort();
+    const reachable = new Set([startNode]);
+
+    for (const node of allSorted) {
+      if (!reachable.has(node)) continue;
+      for (const edge of this.edges) {
+        if (edge.fromNode === node) reachable.add(edge.toNode);
+      }
+    }
+
+    return allSorted.filter(n => reachable.has(n));
+  }
+
   drawEdges(tempLine = null) {
-    // Resize canvas to match graph container
     this.canvas.width  = this.graph.offsetWidth;
     this.canvas.height = this.graph.offsetHeight;
 
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Draw established edges
     for (const edge of this.edges) {
       const fromWidget = this.getWidget(edge.fromNode);
       const toWidget   = this.getWidget(edge.toNode);
@@ -129,20 +159,18 @@ export class Pipeline {
 
       const outType = edge.fromNode.outputSchema[edge.fromPort];
       const color   = PORT_COLORS[outType] ?? '#94a3b8';
-
-      const dx = Math.abs(to.x - from.x) * 0.5;
+      const dx      = Math.abs(to.x - from.x) * 0.5;
 
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.bezierCurveTo(from.x + dx, from.y, to.x - dx, to.y, to.x, to.y);
-      ctx.strokeStyle  = color;
-      ctx.lineWidth    = 2;
-      ctx.globalAlpha  = 0.75;
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2;
+      ctx.globalAlpha = 0.75;
       ctx.setLineDash([]);
       ctx.stroke();
     }
 
-    // Draw temporary drag line if present
     if (tempLine) {
       const { x1, y1, x2, y2 } = tempLine;
       const dx = Math.abs(x2 - x1) * 0.5;
