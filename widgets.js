@@ -148,7 +148,7 @@ export class NodeWidget {
       case 'ImageUploader':   return this._buildImageUploaderContent();
       case 'Contrast':        return this._buildContrastContent();
       case 'ShowPixelBuffer': return this._buildShowPixelBufferContent();
-      case 'PixelToVector':   return this._buildPixelToVectorContent();
+      case 'OptHillClimb':    return this._buildOptHillClimbContent();
       case 'ImageDiff':       return this._buildImageDiffContent();
       default:                return null;
     }
@@ -309,55 +309,30 @@ export class NodeWidget {
     return scroll;
   }
 
-  _buildPixelToVectorContent() {
+  _buildOptHillClimbContent() {
+    const node = this.node;
     const wrap = document.createElement('div');
     wrap.className = 'px-3 py-2 flex flex-col gap-2';
 
-    // Iterations input
-    const iterRow = document.createElement('div');
-    iterRow.className = 'flex items-center gap-2';
+    const numRow = (label, value, min, max, step, onChange) => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-2';
+      const lbl = document.createElement('span');
+      lbl.className = 'text-xs text-gray-400 flex-1';
+      lbl.textContent = label;
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.min = String(min); inp.max = String(max);
+      inp.step = String(step); inp.value = String(value);
+      inp.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
+      inp.addEventListener('change', () => onChange(parseFloat(inp.value)));
+      row.appendChild(lbl); row.appendChild(inp);
+      return row;
+    };
 
-    const iterLabel = document.createElement('span');
-    iterLabel.className = 'text-xs text-gray-400 flex-1';
-    iterLabel.textContent = 'Iterations';
-
-    const iterInput = document.createElement('input');
-    iterInput.type      = 'number';
-    iterInput.min       = '10';
-    iterInput.max       = '5000';
-    iterInput.step      = '10';
-    iterInput.value     = String(this.node.iterations ?? 300);
-    iterInput.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
-    iterInput.addEventListener('change', () => {
-      this.node.iterations = Math.max(10, parseInt(iterInput.value) || 300);
-    });
-
-    iterRow.appendChild(iterLabel);
-    iterRow.appendChild(iterInput);
-    wrap.appendChild(iterRow);
-
-    // Pen width input
-    const penRow = document.createElement('div');
-    penRow.className = 'flex items-center gap-2';
-
-    const penLabel = document.createElement('span');
-    penLabel.className = 'text-xs text-gray-400 flex-1';
-    penLabel.textContent = 'Pen width (px)';
-
-    const penInput = document.createElement('input');
-    penInput.type      = 'number';
-    penInput.min       = '0.5';
-    penInput.max       = '20';
-    penInput.step      = '0.5';
-    penInput.value     = String(this.node.penWidthPx ?? 2);
-    penInput.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
-    penInput.addEventListener('change', () => {
-      this.node.penWidthPx = Math.max(0.5, parseFloat(penInput.value) || 2);
-    });
-
-    penRow.appendChild(penLabel);
-    penRow.appendChild(penInput);
-    wrap.appendChild(penRow);
+    wrap.appendChild(numRow('Rounds', node.rounds, 10, 10000, 10,
+      v => { node.rounds = Math.max(10, v); }));
+    wrap.appendChild(numRow('Pen width (px)', node.penWidthPx, 0.5, 20, 0.5,
+      v => { node.penWidthPx = Math.max(0.5, v); }));
 
     // Progress bar (hidden until running)
     const progressWrap = document.createElement('div');
@@ -366,12 +341,10 @@ export class NodeWidget {
 
     const progressBg = document.createElement('div');
     progressBg.className = 'w-full h-1.5 bg-gray-100 rounded-full overflow-hidden';
-
     const progressBar = document.createElement('div');
     progressBar.className = 'h-full bg-blue-500 rounded-full transition-all duration-100';
     progressBar.style.width = '0%';
     this._progressBar = progressBar;
-
     progressBg.appendChild(progressBar);
     progressWrap.appendChild(progressBg);
 
@@ -380,29 +353,25 @@ export class NodeWidget {
     scoreLabel.textContent = 'Score: —';
     this._ptv_scoreLabel = scoreLabel;
     progressWrap.appendChild(scoreLabel);
-
     wrap.appendChild(progressWrap);
 
-    // Live preview canvas — shown during optimisation, hidden when idle
+    // Live preview canvas
     const previewWrap = document.createElement('div');
     previewWrap.style.cssText = 'overflow:auto; max-width:280px; max-height:200px; border-radius:4px; border:1px solid #e5e7eb; display:none;';
-
     const previewCanvas = document.createElement('canvas');
     previewCanvas.style.cssText = 'display:block; image-rendering:pixelated;';
     this._ptvPreviewCanvas = previewCanvas;
     this._ptvPreviewWrap   = previewWrap;
-
     previewWrap.appendChild(previewCanvas);
     wrap.appendChild(previewWrap);
 
-    // Wire callbacks on the node
-    this.node.onProgress = (pct, score) => this.updateProgress(pct, score);
-    this.node.onPreview  = (pixels, w, h) => this.updatePtvPreview(pixels, w, h);
+    node.onProgress = (pct, score) => this.updateProgress(pct, score);
+    node.onPreview  = (pixels, w, h) => this.updatePtvPreview(pixels, w, h);
 
     return wrap;
   }
 
-  // Called by PixelToVector every 100 iterations with a greyscale Uint8Array.
+  // Called by OptHillClimb every 100 rounds with a greyscale Uint8Array.
   updatePtvPreview(pixels, w, h) {
     const canvas = this._ptvPreviewCanvas;
     const wrap   = this._ptvPreviewWrap;
@@ -460,8 +429,8 @@ export class NodeWidget {
       if (this._ptvPreviewWrap) this._ptvPreviewWrap.style.display = 'none';
     }
 
-    // Show/hide progress bar for PixelToVector
-    if (this.node.constructor.name === 'PixelToVector') {
+    // Show/hide progress bar for OptHillClimb
+    if (this.node.constructor.name === 'OptHillClimb') {
       if (running) {
         this._progressWrap?.classList.remove('hidden');
         if (this._progressBar) this._progressBar.style.width = '0%';

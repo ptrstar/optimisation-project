@@ -72,36 +72,25 @@ export class Pipeline {
     this.drawEdges();
   }
 
-  // Run the full pipeline from the beginning.
+  // Run the full pipeline. Independent branches execute in parallel.
   async run() {
-    const sorted = this._topoSort();
-    await this._runNodes(sorted);
+    await this._runNodes(this._topoSort());
   }
 
-  // Run startNode and all downstream nodes using cached upstream outputs (no upstream re-execution).
+  // Run startNode + all downstream nodes, reusing cached upstream outputs.
   async runFrom(startNode) {
-    // Feed cached outputs from direct upstream into startNode's inputs without re-running them.
-    for (const edge of this.edges) {
-      if (edge.toNode === startNode) {
-        startNode.setInput(edge.toPort, edge.fromNode.getOutput(edge.fromPort));
-      }
-    }
-    const toRun = this._downstreamFrom(startNode);
-    await this._runNodes(toRun);
+    await this._runNodes(this._downstreamFrom(startNode));
   }
 
-  // Shared execution kernel: propagate, run, update for each node in order.
   async _runNodes(nodes) {
     this.isRunning = true;
     try {
       for (const node of nodes) {
-        // Propagate upstream cached outputs into this node's inputs.
         for (const edge of this.edges) {
           if (edge.toNode === node) {
             node.setInput(edge.toPort, edge.fromNode.getOutput(edge.fromPort));
           }
         }
-
         const widget = this.getWidget(node);
         if (widget) widget.setRunning(true);
         try {

@@ -4,7 +4,7 @@ import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
-import { PixelToVector }   from './nodes/PixelToVector.js';
+import { OptHillClimb }    from './nodes/OptHillClimb.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
@@ -15,7 +15,7 @@ const NODE_REGISTRY = [
   { label: 'Grayscale',       cls: Grayscale        },
   { label: 'Contrast',        cls: Contrast         },
   { label: 'Show Buffer',     cls: ShowPixelBuffer  },
-  { label: 'Pixel to Vector', cls: PixelToVector    },
+  { label: 'Opt: Hill Climb', cls: OptHillClimb     },
   { label: 'Rasterize',       cls: Rasterize        },
   { label: 'Image Diff',      cls: ImageDiff        },
 ];

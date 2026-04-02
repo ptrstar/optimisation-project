@@ -9,7 +9,7 @@ import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
-import { PixelToVector }   from './nodes/PixelToVector.js';
+import { OptHillClimb }    from './nodes/OptHillClimb.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
@@ -20,7 +20,7 @@ const NODE_CLASSES = {
   Grayscale,
   Contrast,
   ShowPixelBuffer,
-  PixelToVector,
+  OptHillClimb,
   Rasterize,
   ImageDiff,
   CanvasSetup,
@@ -113,7 +113,7 @@ const PRESET_BASIC_TRACING = {
     { id: 'contrast-2',      type: 'Contrast',        x: 310,  y: 260, params: { amount: 1.2 } },
     { id: 'grayscale-3',     type: 'Grayscale',       x: 580,  y: 260, params: {} },
     { id: 'showbuffer-4',    type: 'ShowPixelBuffer', x: 850,  y: 260, params: {} },
-    { id: 'ptv-5',           type: 'PixelToVector',   x: 580,  y: 480, params: { iterations: 300, penWidthPx: 2 } },
+    { id: 'ptv-5',           type: 'OptHillClimb',    x: 580,  y: 480, params: { rounds: 300, penWidthPx: 2 } },
     { id: 'rasterize-6',     type: 'Rasterize',       x: 850,  y: 480, params: {} },
     { id: 'showbuffer-7',    type: 'ShowPixelBuffer', x: 1120, y: 480, params: {} },
   ],
