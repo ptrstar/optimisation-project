@@ -5,9 +5,12 @@ import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
 import { OptHillClimb }    from './nodes/OptHillClimb.js';
+import { OptGenetic }      from './nodes/OptGenetic.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
+import { SobelGradient }   from './nodes/SobelGradient.js';
+import { Blur }            from './nodes/Blur.js';
 
 const NODE_REGISTRY = [
   { label: 'Canvas Setup',    cls: CanvasSetup     },
@@ -16,8 +19,11 @@ const NODE_REGISTRY = [
   { label: 'Contrast',        cls: Contrast         },
   { label: 'Show Buffer',     cls: ShowPixelBuffer  },
   { label: 'Opt: Hill Climb', cls: OptHillClimb     },
+  { label: 'Opt: Genetic',    cls: OptGenetic       },
   { label: 'Rasterize',       cls: Rasterize        },
   { label: 'Image Diff',      cls: ImageDiff        },
+  { label: 'Sobel Gradient',  cls: SobelGradient    },
+  { label: 'Blur',            cls: Blur             },
 ];
 
 // DOM refs

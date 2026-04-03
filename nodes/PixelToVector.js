@@ -1,6 +1,7 @@
 import { BaseNode } from './BaseNode.js';
 import { PortTypes } from '../types/PortTypes.js';
 import { VectorImage } from '../formats/VectorImage.js';
+import { Rasterize } from './Rasterize.js';
 
 export class PixelToVector extends BaseNode {
   constructor(id) {
@@ -60,31 +61,11 @@ export class PixelToVector extends BaseNode {
   // ── Internals ───────────────────────────────────────────────────────────────
 
   _rasterizeGS(vector) {
-    const canvas = new OffscreenCanvas(vector.width, vector.height);
-    const ctx    = canvas.getContext('2d');
-    ctx.fillStyle   = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#000000';
-
-    for (const { points, style } of vector.lines) {
-      if (!points || points.length < 2) continue;
-      ctx.lineWidth   = style.width   ?? 1;
-      ctx.globalAlpha = style.opacity ?? 1;
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      for (let k = 1; k < points.length; k++) ctx.lineTo(points[k].x, points[k].y);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    const rgba   = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const pixels = new Uint8Array(vector.width * vector.height);
-    for (let i = 0; i < pixels.length; i++) pixels[i] = rgba[i * 4];
-    return pixels;
+    return Rasterize.renderToGS(vector);
   }
 
   _score(vector, target) {
-    const rendered  = this._rasterizeGS(vector);
+    const rendered  = Rasterize.renderToGS(vector);
     const targetLum = target.data;
     const n         = rendered.length;
     let total = 0;

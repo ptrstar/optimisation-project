@@ -143,12 +143,15 @@ export class NodeWidget {
   }
 
   _buildContent() {
+    // Nodes can define buildContent(widget) to own their UI without touching widgets.js.
+    if (typeof this.node.buildContent === 'function') {
+      return this.node.buildContent(this);
+    }
     switch (this.node.constructor.name) {
       case 'CanvasSetup':     return this._buildCanvasSetupContent();
       case 'ImageUploader':   return this._buildImageUploaderContent();
       case 'Contrast':        return this._buildContrastContent();
       case 'ShowPixelBuffer': return this._buildShowPixelBufferContent();
-      case 'OptHillClimb':    return this._buildOptHillClimbContent();
       case 'ImageDiff':       return this._buildImageDiffContent();
       default:                return null;
     }
@@ -309,98 +312,6 @@ export class NodeWidget {
     return scroll;
   }
 
-  _buildOptHillClimbContent() {
-    const node = this.node;
-    const wrap = document.createElement('div');
-    wrap.className = 'px-3 py-2 flex flex-col gap-2';
-
-    const numRow = (label, value, min, max, step, onChange) => {
-      const row = document.createElement('div');
-      row.className = 'flex items-center gap-2';
-      const lbl = document.createElement('span');
-      lbl.className = 'text-xs text-gray-400 flex-1';
-      lbl.textContent = label;
-      const inp = document.createElement('input');
-      inp.type = 'number'; inp.min = String(min); inp.max = String(max);
-      inp.step = String(step); inp.value = String(value);
-      inp.className = 'w-20 text-xs text-right font-mono border border-gray-200 rounded px-1 py-0.5 text-gray-600';
-      inp.addEventListener('change', () => onChange(parseFloat(inp.value)));
-      row.appendChild(lbl); row.appendChild(inp);
-      return row;
-    };
-
-    wrap.appendChild(numRow('Rounds', node.rounds, 10, 10000, 10,
-      v => { node.rounds = Math.max(10, v); }));
-    wrap.appendChild(numRow('Pen width (px)', node.penWidthPx, 0.5, 20, 0.5,
-      v => { node.penWidthPx = Math.max(0.5, v); }));
-    wrap.appendChild(numRow('Linecount', node.lineCount, 10, 1000, 10,
-      v => { node.lineCount = Math.max(10, v); }))
-    wrap.appendChild(numRow('MaxAmplitude', node.maxAmplitude, 0.1, 100, 0.1,
-      v => { node.maxAmplitude = Math.max(0.1, v); }))
-
-    // Progress bar (hidden until running)
-    const progressWrap = document.createElement('div');
-    progressWrap.className = 'hidden flex flex-col gap-1';
-    this._progressWrap = progressWrap;
-
-    const progressBg = document.createElement('div');
-    progressBg.className = 'w-full h-1.5 bg-gray-100 rounded-full overflow-hidden';
-    const progressBar = document.createElement('div');
-    progressBar.className = 'h-full bg-blue-500 rounded-full transition-all duration-100';
-    progressBar.style.width = '0%';
-    this._progressBar = progressBar;
-    progressBg.appendChild(progressBar);
-    progressWrap.appendChild(progressBg);
-
-    const scoreLabel = document.createElement('span');
-    scoreLabel.className = 'text-xs font-mono text-gray-400';
-    scoreLabel.textContent = 'Score: —';
-    this._ptv_scoreLabel = scoreLabel;
-    progressWrap.appendChild(scoreLabel);
-    wrap.appendChild(progressWrap);
-
-    // Live preview canvas
-    const previewWrap = document.createElement('div');
-    previewWrap.style.cssText = 'overflow:auto; max-width:280px; max-height:200px; border-radius:4px; border:1px solid #e5e7eb; display:none;';
-    const previewCanvas = document.createElement('canvas');
-    previewCanvas.style.cssText = 'display:block; image-rendering:pixelated;';
-    this._ptvPreviewCanvas = previewCanvas;
-    this._ptvPreviewWrap   = previewWrap;
-    previewWrap.appendChild(previewCanvas);
-    wrap.appendChild(previewWrap);
-
-    node.onProgress = (pct, score) => this.updateProgress(pct, score);
-    node.onPreview  = (pixels, w, h) => this.updatePtvPreview(pixels, w, h);
-
-    return wrap;
-  }
-
-  // Called by OptHillClimb every 100 rounds with a greyscale Uint8Array.
-  updatePtvPreview(pixels, w, h) {
-    const canvas = this._ptvPreviewCanvas;
-    const wrap   = this._ptvPreviewWrap;
-    if (!canvas || !wrap) return;
-
-    // Show the container on first call
-    wrap.style.display = 'block';
-
-    canvas.width  = w;
-    canvas.height = h;
-
-    // Build RGBA ImageData from single-channel greyscale
-    const ctx  = canvas.getContext('2d');
-    const rgba = new Uint8ClampedArray(w * h * 4);
-    for (let i = 0; i < pixels.length; i++) {
-      const v    = pixels[i];
-      const base = i * 4;
-      rgba[base]     = v;
-      rgba[base + 1] = v;
-      rgba[base + 2] = v;
-      rgba[base + 3] = 255;
-    }
-    ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
-  }
-
   _buildImageDiffContent() {
     const wrap = document.createElement('div');
     wrap.className = 'px-3 py-2 flex flex-col gap-1';
@@ -419,33 +330,19 @@ export class NodeWidget {
     return wrap;
   }
 
-  // Show/hide the running indicator dot.
   setRunning(running) {
     if (!this._runningIndicator) return;
     if (running) {
       this._runningIndicator.classList.remove('hidden');
       this._runningIndicator.style.animation = 'pulse-dot 0.8s ease-in-out infinite';
+      this._progressWrap?.classList.remove('hidden');
+      if (this._progressBar) this._progressBar.style.width = '0%';
     } else {
       this._runningIndicator.classList.add('hidden');
       this._runningIndicator.style.animation = 'none';
       this._progressWrap?.classList.add('hidden');
-      // Hide live preview once done (final result is in the downstream ShowPixelBuffer)
-      if (this._ptvPreviewWrap) this._ptvPreviewWrap.style.display = 'none';
+      if (this._optPreviewWrap) this._optPreviewWrap.style.display = 'none';
     }
-
-    // Show/hide progress bar for OptHillClimb
-    if (this.node.constructor.name === 'OptHillClimb') {
-      if (running) {
-        this._progressWrap?.classList.remove('hidden');
-        if (this._progressBar) this._progressBar.style.width = '0%';
-      }
-    }
-  }
-
-  // Called by PixelToVector's onProgress callback.
-  updateProgress(pct, score) {
-    if (this._progressBar) this._progressBar.style.width = `${(pct * 100).toFixed(1)}%`;
-    if (this._ptv_scoreLabel) this._ptv_scoreLabel.textContent = `Score: ${score.toFixed(2)}`;
   }
 
   // Renders imageData into a canvas, fitting within maxW×maxH while preserving aspect ratio.

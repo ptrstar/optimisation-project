@@ -10,9 +10,13 @@ import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
 import { OptHillClimb }    from './nodes/OptHillClimb.js';
+import { OptGenetic }      from './nodes/OptGenetic.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
+import { PixelToVector }   from './nodes/PixelToVector.js';
+import { SobelGradient }   from './nodes/SobelGradient.js';
+import { Blur }            from './nodes/Blur.js';
 
 // Registry: type-name string → class. Add new node classes here.
 const NODE_CLASSES = {
@@ -21,9 +25,13 @@ const NODE_CLASSES = {
   Contrast,
   ShowPixelBuffer,
   OptHillClimb,
+  OptGenetic,
   Rasterize,
   ImageDiff,
   CanvasSetup,
+  PixelToVector,
+  SobelGradient,
+  Blur,
 };
 
 // ── Serialise ──────────────────────────────────────────────────────────────
