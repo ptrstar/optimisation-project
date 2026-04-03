@@ -333,6 +333,10 @@ export class NodeWidget {
       v => { node.rounds = Math.max(10, v); }));
     wrap.appendChild(numRow('Pen width (px)', node.penWidthPx, 0.5, 20, 0.5,
       v => { node.penWidthPx = Math.max(0.5, v); }));
+    wrap.appendChild(numRow('Linecount', node.lineCount, 10, 1000, 10,
+      v => { node.lineCount = Math.max(10, v); }))
+    wrap.appendChild(numRow('MaxAmplitude', node.maxAmplitude, 0.1, 100, 0.1,
+      v => { node.maxAmplitude = Math.max(0.1, v); }))
 
     // Progress bar (hidden until running)
     const progressWrap = document.createElement('div');

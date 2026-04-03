@@ -96,6 +96,7 @@ export class Pipeline {
         try {
           await node.run();
         } catch (err) {
+          console.error(err)
           throw new Error(`Node "${node.id}" failed: ${err.message}`);
         } finally {
           if (widget) widget.setRunning(false);

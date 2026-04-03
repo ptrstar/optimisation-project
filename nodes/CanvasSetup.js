@@ -9,8 +9,8 @@ export class CanvasSetup extends BaseNode {
     this.inputs       = {};
     this.outputs      = { config: null };
 
-    this.widthCm    = 15;    // paper width in centimetres
-    this.heightCm   = 10;    // paper height in centimetres
+    this.widthCm    = 4;    // paper width in centimetres
+    this.heightCm   = 4;    // paper height in centimetres
     this.dpi        = 96;    // output resolution in dots per inch
     this.penWidthMm = 0.7;   // pen nib width in millimetres
   }

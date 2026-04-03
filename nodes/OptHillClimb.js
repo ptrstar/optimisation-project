@@ -14,23 +14,38 @@ export class OptHillClimb extends BaseNode {
     this.penWidthPx  = 2;
     this.onProgress  = null; // (fraction: 0–1, score: number) => void
     this.onPreview   = null; // (gsPixels: Uint8Array, w, h) => void
+
+    // Hyperparams
+    this.maxAmplitude = 5;
+    this.lineCount = 200;
   }
 
   async run() {
     const src = this.inputs.image;
     if (!src) return;
 
-    const vector       = new VectorImage(src.width, src.height);
-    let   currentScore = this._score(vector, src);
+    const vector = new VectorImage(src.width, src.height);
+    for (let i = 0; i < this.lineCount; i++) {
+      const line = this._randomLine(src.width, src.height);
+      vector.addLine(line.points, line.style)
+    }
+    let currentScore = this._score(vector, src);
 
+    
     for (let i = 0; i < this.rounds; i++) {
-      const line      = this._randomLine(src.width, src.height);
-      const candidate = vector.clone();
-      candidate.addLine(line.points, line.style);
+      const l_idx = Math.floor(vector.lines.length*Math.random())
+      const p_1 = vector.lines[l_idx].points[0];
+      const p_2 = vector.lines[l_idx].points[1];
 
-      if (this._score(candidate, src) < currentScore) {
-        vector.addLine(line.points, line.style);
-        currentScore = this._score(vector, src);
+      vector.lines[l_idx].points[0] = {x: p_1.x + (Math.random() - 0.5) * this.maxAmplitude, y: p_1.y + (Math.random() - 0.5) * this.maxAmplitude}
+      vector.lines[l_idx].points[1] = {x: p_2.x + (Math.random() - 0.5) * this.maxAmplitude, y: p_2.y + (Math.random() - 0.5) * this.maxAmplitude}
+      const candidate_score = this._score(vector, src);
+
+      if (candidate_score > currentScore) {
+        vector.lines[l_idx].points[0] = p_1;
+        vector.lines[l_idx].points[1] = p_2;
+      } else {
+        currentScore = candidate_score;
       }
 
       if (i % 20 === 0) {
@@ -99,7 +114,7 @@ export class OptHillClimb extends BaseNode {
         { x: Math.max(0, Math.min(width,  x1 + Math.cos(angle) * len)),
           y: Math.max(0, Math.min(height, y1 + Math.sin(angle) * len)) },
       ],
-      style: { width: this.penWidthPx, opacity: 0.6 + Math.random() * 0.4 },
+      style: { width: this.penWidthPx, opacity: 1 },
     };
   }
 }

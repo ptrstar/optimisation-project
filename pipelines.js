@@ -108,7 +108,7 @@ export function loadPreset(pipeline, preset) {
  */
 const PRESET_BASIC_TRACING = {
   nodes: [
-    { id: 'canvassetup-0',   type: 'CanvasSetup',     x: 40,   y: 40,  params: { widthCm: 15, heightCm: 10, dpi: 96, penWidthMm: 0.7 } },
+    { id: 'canvassetup-0',   type: 'CanvasSetup',     x: 40,   y: 40,  params: { widthCm: 4, heightCm: 4, dpi: 96, penWidthMm: 0.7 } },
     { id: 'imageuploader-1', type: 'ImageUploader',   x: 40,   y: 260, params: { fitMode: 'fit' } },
     { id: 'contrast-2',      type: 'Contrast',        x: 310,  y: 260, params: { amount: 1.2 } },
     { id: 'grayscale-3',     type: 'Grayscale',       x: 580,  y: 260, params: {} },
