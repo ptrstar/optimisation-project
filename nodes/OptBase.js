@@ -45,6 +45,53 @@ export class OptBase extends BaseNode {
     return Rasterize.renderToGS(vector);
   }
 
+  /**
+   * Separable box blur on a flat Uint8Array (same algorithm as Blur.js).
+   * Works directly on greyscale pixel buffers — no ImageData wrapper needed.
+   * Portable: any opt subclass can call this to pre-blur a scoring target.
+   *
+   * @param {Uint8Array} src   – source buffer (length = w*h, 0=black 255=white)
+   * @param {number}     w     – buffer width in pixels
+   * @param {number}     h     – buffer height in pixels
+   * @param {number}     radius – box half-width in pixels (0 = no-op, returns src)
+   * @returns {Uint8Array} new blurred buffer (src is never mutated)
+   */
+  _blurBuffer(src, w, h, radius) {
+    const r = Math.max(0, Math.round(radius));
+    if (r === 0) return src;
+
+    const N   = w * h;
+    const tmp = new Float32Array(N);
+    const dst = new Uint8Array(N);
+
+    // Horizontal pass (sliding window — O(w*h) regardless of radius)
+    for (let y = 0; y < h; y++) {
+      const base = y * w;
+      let sum = 0;
+      for (let x = 0; x <= Math.min(r, w - 1); x++) sum += src[base + x];
+      for (let x = 0; x < w; x++) {
+        const add = x + r + 1 < w ? src[base + x + r + 1] : 0;
+        const rem = x - r - 1 >= 0 ? src[base + x - r - 1] : 0;
+        sum += add - rem;
+        tmp[base + x] = sum / Math.min(2 * r + 1, w);
+      }
+    }
+
+    // Vertical pass
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let y = 0; y <= Math.min(r, h - 1); y++) sum += tmp[y * w + x];
+      for (let y = 0; y < h; y++) {
+        const add = y + r + 1 < h ? tmp[(y + r + 1) * w + x] : 0;
+        const rem = y - r - 1 >= 0 ? tmp[(y - r - 1) * w + x] : 0;
+        sum += add - rem;
+        dst[y * w + x] = Math.round(sum / Math.min(2 * r + 1, h));
+      }
+    }
+
+    return dst;
+  }
+
   // Mean-absolute-error between a VectorImage and a gs_rasterimage target.
   _score(vector, target) {
     const rendered = Rasterize.renderToGS(vector);
