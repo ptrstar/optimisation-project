@@ -9,8 +9,9 @@ import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
-import { OptHillClimb }    from './nodes/OptHillClimb.js';
-import { OptGenetic }      from './nodes/OptGenetic.js';
+import { OptHillClimb }         from './nodes/OptHillClimb.js';
+import { OptGenetic }           from './nodes/OptGenetic.js';
+import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
@@ -26,6 +27,7 @@ const NODE_CLASSES = {
   ShowPixelBuffer,
   OptHillClimb,
   OptGenetic,
+  OptGreedySequential,
   Rasterize,
   ImageDiff,
   CanvasSetup,

@@ -4,8 +4,9 @@ import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
-import { OptHillClimb }    from './nodes/OptHillClimb.js';
-import { OptGenetic }      from './nodes/OptGenetic.js';
+import { OptHillClimb }         from './nodes/OptHillClimb.js';
+import { OptGenetic }           from './nodes/OptGenetic.js';
+import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
@@ -18,8 +19,9 @@ const NODE_REGISTRY = [
   { label: 'Grayscale',       cls: Grayscale        },
   { label: 'Contrast',        cls: Contrast         },
   { label: 'Show Buffer',     cls: ShowPixelBuffer  },
-  { label: 'Opt: Hill Climb', cls: OptHillClimb     },
-  { label: 'Opt: Genetic',    cls: OptGenetic       },
+  { label: 'Opt: Hill Climb',        cls: OptHillClimb        },
+  { label: 'Opt: Genetic',           cls: OptGenetic          },
+  { label: 'Opt: Greedy Sequential', cls: OptGreedySequential },
   { label: 'Rasterize',       cls: Rasterize        },
   { label: 'Image Diff',      cls: ImageDiff        },
   { label: 'Sobel Gradient',  cls: SobelGradient    },
