@@ -165,9 +165,65 @@ const PRESET_STIPPLE = {
   edges: _optPresetEdges('opt-5'),
 };
 
+// ── Compare-all preset ──────────────────────────────────────────────────────
+// Top row: full preprocessing chain (CanvasSetup → Grayscale → ShowPixelBuffer).
+// Below it, one unconnected Opt → Rasterize → ShowPixelBuffer chain per algorithm,
+// stacked vertically and x-aligned with the Grayscale node so the user can connect
+// any one of them by drawing a single edge from Grayscale's image output.
+const PRESET_COMPARE = (() => {
+  const TOP_Y   = 40;
+  const OPT_X   = 760;   // same x as Grayscale — easy to connect
+  const RAS_X   = 1000;
+  const SHOW_X  = 1240;
+  const ROW_GAP = 300;   // vertical spacing between opt rows
+
+  const optRow = (rowIdx, id, type, params) => {
+    const y = TOP_Y + 280 + rowIdx * ROW_GAP;
+    return [
+      { id,              type,            x: OPT_X,  y, params },
+      { id: `ras-${id}`, type: 'Rasterize',       x: RAS_X,  y, params: {} },
+      { id: `sb-${id}`,  type: 'ShowPixelBuffer', x: SHOW_X, y, params: {} },
+    ];
+  };
+
+  const optEdges = (id) => ([
+    { from: id,          fromPort: 'vector', to: `ras-${id}`, toPort: 'vector' },
+    { from: `ras-${id}`, fromPort: 'image',  to: `sb-${id}`,  toPort: 'image'  },
+  ]);
+
+  return {
+    nodes: [
+      // Top preprocessing chain
+      { id: 'cs-0',  type: 'CanvasSetup',     x: 40,   y: TOP_Y, params: { widthCm: 4, heightCm: 4, dpi: 96, penWidthMm: 0.7 } },
+      { id: 'up-1',  type: 'ImageUploader',   x: 280,  y: TOP_Y, params: { fitMode: 'fit' } },
+      { id: 'co-2',  type: 'Contrast',        x: 520,  y: TOP_Y, params: { amount: 1.2 } },
+      { id: 'gs-3',  type: 'Grayscale',       x: OPT_X,y: TOP_Y, params: {} },
+      { id: 'sb-top',type: 'ShowPixelBuffer', x: 1000, y: TOP_Y, params: {} },
+      // Opt chains (unconnected on input — user draws one edge from gs-3 to activate)
+      ...optRow(0, 'hc',  'OptHillClimb',        { rounds: 2000, lineCount: 200, penWidthPx: 2, maxAmplitude: 15, scoreScale: 0.5 }),
+      ...optRow(1, 'gen', 'OptGenetic',           { generations: 300, popSize: 30, lineCount: 100, penWidthPx: 2, mutationRate: 0.05, mutationAmp: 20, eliteCount: 2, tournamentK: 3, scoreScale: 0.5 }),
+      ...optRow(2, 'gr',  'OptGreedySequential',  { lineCount: 150, candidates: 400, penWidthPx: 2, scoreScale: 0.5, maxLenFrac: 0.4, lineOpacity: 0.8, blurRadius: 8, blurMix: 0.4 }),
+      ...optRow(3, 'st',  'OptStipple',           { dotCount: 300, iterations: 20, dotRadius: 3, varyRadius: 0.5, scoreScale: 0.2 }),
+    ],
+    edges: [
+      // Top chain
+      { from: 'cs-0',  fromPort: 'config', to: 'up-1',  toPort: 'config' },
+      { from: 'up-1',  fromPort: 'image',  to: 'co-2',  toPort: 'image'  },
+      { from: 'co-2',  fromPort: 'image',  to: 'gs-3',  toPort: 'image'  },
+      { from: 'gs-3',  fromPort: 'image',  to: 'sb-top',toPort: 'image'  },
+      // Within each opt chain
+      ...optEdges('hc'),
+      ...optEdges('gen'),
+      ...optEdges('gr'),
+      ...optEdges('st'),
+    ],
+  };
+})();
+
 export const PRESETS = [
   { name: 'Hill Climb',        pipeline: PRESET_HILL_CLIMB },
   { name: 'Genetic',           pipeline: PRESET_GENETIC    },
   { name: 'Greedy Sequential', pipeline: PRESET_GREEDY     },
   { name: 'Stipple',           pipeline: PRESET_STIPPLE    },
+  { name: 'Compare All',       pipeline: PRESET_COMPARE    },
 ];
