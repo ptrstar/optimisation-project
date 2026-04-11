@@ -2,43 +2,41 @@ import { OptBase }     from './OptBase.js';
 import { VectorImage } from '../formats/VectorImage.js';
 
 /**
- * OptGenetic — genetic algorithm optimisation node.
+ * OptGenetic — genetic algorithm optimisation (gs_rasterimage → vectorimage).
  *
- * Inherits from OptBase:
- *   - this._score(vector, gsTarget)  → MAE score (lower is better)
- *   - this._rasterizeGS(vector)      → Uint8Array of luminance
- *   - this.onProgress(pct, score)    → drives the progress bar
- *   - this.onPreview(pixels, w, h)   → drives the live preview canvas
- *   - getParams() / setParams()      → auto-derived from this.paramDefs
- *   - buildContent(widget)           → auto-generated UI from paramDefs
- *
- * GA sketch:
- *   - Population: array of VectorImage (each is one candidate drawing)
- *   - Fitness: this._score() per individual (lower = better)
- *   - Selection: tournament or roulette-wheel on fitness
- *   - Crossover: swap random subsets of lines between two parents
- *   - Mutation: perturb a random line endpoint (like hill-climb does per round)
- *   - Elitism: always keep the best individual unchanged into next generation
+ * Efficiency notes:
+ *   - One OffscreenCanvas is allocated per run() and reused every score call.
+ *   - Scoring happens at `scoreScale` resolution (default 0.5 = 4× fewer pixels).
+ *   - Target image is downscaled + R-channel extracted into a flat Uint8Array once.
+ *   - Crossover builds child.lines directly without VectorImage.clone().
+ *   - Style objects are immutable (positions only change), so they are shared by ref.
+ *   - Fitness is stored in Float32Array (no boxing).
+ *   - MAE inner loop uses a manual abs (sign branch) to avoid Math.abs call overhead.
  */
 export class OptGenetic extends OptBase {
   constructor(id) {
     super(id);
 
-    // ── Hyperparameters ────────────────────────────────────────────────────────
-    this.generations   = 100;   // number of GA generations to run
-    this.popSize       = 20;    // individuals per generation
-    this.lineCount     = 100;   // lines per individual
-    this.penWidthPx    = 2;     // stroke width in pixels
-    this.mutationRate  = 0.1;   // fraction of lines mutated per individual per generation
-    this.eliteCount    = 2;     // top-N individuals carried unchanged to next generation
+    this.generations  = 200;
+    this.popSize      = 30;
+    this.lineCount    = 100;
+    this.penWidthPx   = 2;
+    this.mutationRate = 0.05;  // probability of mutating each line per individual
+    this.mutationAmp  = 20;    // max endpoint displacement per nudge mutation (pixels)
+    this.eliteCount   = 2;     // top-N individuals carried unchanged each generation
+    this.tournamentK  = 3;     // rivals per tournament draw
+    this.scoreScale   = 0.5;   // scoring resolution relative to source (0.1–1.0)
 
     this.paramDefs = [
-      { label: 'Generations',    key: 'generations',  min: 10,   max: 1000,  step: 10 },
-      { label: 'Population',     key: 'popSize',      min: 2,    max: 100,   step: 1 },
-      { label: 'Line count',     key: 'lineCount',    min: 10,   max: 500,   step: 10 },
-      { label: 'Pen width (px)', key: 'penWidthPx',   min: 0.5,  max: 20,    step: 0.5 },
-      { label: 'Mutation rate',  key: 'mutationRate', min: 0.01, max: 1,     step: 0.01 },
-      { label: 'Elite count',    key: 'eliteCount',   min: 0,    max: 10,    step: 1 },
+      { label: 'Generations',    key: 'generations',  min: 10,   max: 2000, step: 10 },
+      { label: 'Population',     key: 'popSize',      min: 4,    max: 100,  step: 2 },
+      { label: 'Line count',     key: 'lineCount',    min: 10,   max: 500,  step: 10 },
+      { label: 'Pen width (px)', key: 'penWidthPx',   min: 0.5,  max: 20,   step: 0.5 },
+      { label: 'Mut. rate',      key: 'mutationRate', min: 0.01, max: 1,    step: 0.01 },
+      { label: 'Mut. amplitude', key: 'mutationAmp',  min: 1,    max: 200,  step: 1 },
+      { label: 'Elite count',    key: 'eliteCount',   min: 0,    max: 10,   step: 1 },
+      { label: 'Tournament K',   key: 'tournamentK',  min: 2,    max: 10,   step: 1 },
+      { label: 'Score scale',    key: 'scoreScale',   min: 0.1,  max: 1,    step: 0.05 },
     ];
   }
 
@@ -46,119 +44,195 @@ export class OptGenetic extends OptBase {
     const src = this.inputs.image;
     if (!src) return;
 
-    // ── 1. Initialise population ───────────────────────────────────────────────
-    // Each individual is a VectorImage with this.lineCount random lines.
-    // TODO: replace this._randomLine() stub with your own initialisation strategy.
-    let population = Array.from({ length: this.popSize }, () => {
-      const ind = new VectorImage(src.width, src.height);
-      for (let i = 0; i < this.lineCount; i++) {
-        const { points, style } = this._randomLine(src.width, src.height);
-        ind.addLine(points, style);
-      }
-      return ind;
-    });
+    const W = src.width, H = src.height;
+    const diag = Math.sqrt(W * W + H * H);
 
-    // ── 2. Evaluate initial fitness ────────────────────────────────────────────
-    // fitness[i] is the MAE score for population[i] — lower is better.
-    let fitness = population.map(ind => this._score(ind, src));
+    // ── Scoring setup ──────────────────────────────────────────────────────────
+    // Downscale both the canvas and target for fast scoring.
+    const ss  = Math.max(0.1, Math.min(1, this.scoreScale));
+    const sw  = Math.max(1, Math.round(W * ss));
+    const sh  = Math.max(1, Math.round(H * ss));
+    const scX = sw / W;   // coordinate scale factors
+    const scY = sh / H;
+    const scoreN = sw * sh;
+
+    // Downscale + extract target GS once
+    const targetGS = this._downscaleTarget(src, sw, sh);
+
+    // Allocate scoring canvas once per run; clear + redraw each eval
+    const sCanvas = new OffscreenCanvas(sw, sh);
+    const sCtx    = sCanvas.getContext('2d');
+    sCtx.strokeStyle = '#000000';
+    sCtx.lineCap     = 'round';
+
+    // Inner scorer — closure captures all scoring state
+    const evalScore = (ind) => {
+      sCtx.fillStyle = '#ffffff';
+      sCtx.fillRect(0, 0, sw, sh);
+      for (const { points: [p0, p1], style } of ind.lines) {
+        sCtx.lineWidth   = (style.width ?? 1) * scX;
+        sCtx.globalAlpha = style.opacity ?? 1;
+        sCtx.beginPath();
+        sCtx.moveTo(p0.x * scX, p0.y * scY);
+        sCtx.lineTo(p1.x * scX, p1.y * scY);
+        sCtx.stroke();
+      }
+      sCtx.globalAlpha = 1;
+      const px = sCtx.getImageData(0, 0, sw, sh).data;
+      let sum = 0;
+      // Manual abs on byte-range integers is marginally faster than Math.abs
+      for (let i = 0, j = 0; i < scoreN; i++, j += 4) {
+        const d = px[j] - targetGS[i];
+        sum += d > 0 ? d : -d;
+      }
+      return sum / scoreN;
+    };
+
+    // ── Initialise population ──────────────────────────────────────────────────
+    let pop  = Array.from({ length: this.popSize }, () => this._randomInd(W, H, diag));
+    let fits = new Float32Array(this.popSize);
+    for (let i = 0; i < this.popSize; i++) fits[i] = evalScore(pop[i]);
+
+    // ── Main loop ──────────────────────────────────────────────────────────────
+    const lc = this.lineCount;
 
     for (let gen = 0; gen < this.generations; gen++) {
+      // Sort indices by ascending fitness (lower = better)
+      const order = Array.from({ length: this.popSize }, (_, i) => i)
+        .sort((a, b) => fits[a] - fits[b]);
 
-      // ── 3. Selection ──────────────────────────────────────────────────────────
-      // TODO: implement tournament selection or roulette-wheel.
-      // tournament(k): pick k individuals at random, return the one with lowest score.
-      // For roulette: invert scores to make higher = better, then sample proportionally.
-      const selected = this._tournamentSelect(population, fitness, 2);
+      const elite = Math.min(this.eliteCount, this.popSize);
+      const K     = Math.max(2, this.tournamentK);
+      const mr    = this.mutationRate;
+      const amp   = this.mutationAmp;
 
-      // ── 4. Crossover ──────────────────────────────────────────────────────────
-      // TODO: implement crossover between pairs of selected parents.
-      // Simple approach: for each child, take lines[0..k] from parent A and lines[k..] from parent B
-      // where k is a random split point.
-      const offspring = this._crossover(selected, src.width, src.height);
+      const nextPop  = new Array(this.popSize);
+      const nextFits = new Float32Array(this.popSize);
 
-      // ── 5. Mutation ───────────────────────────────────────────────────────────
-      // TODO: mutate each offspring by randomly perturbing a fraction of its lines.
-      // Reuse or adapt _randomLine() and the hill-climb perturbation strategy.
-      this._mutate(offspring, src.width, src.height);
+      // Carry elites unchanged (no re-scoring)
+      for (let i = 0; i < elite; i++) {
+        nextPop[i]  = pop[order[i]];
+        nextFits[i] = fits[order[i]];
+      }
 
-      // ── 6. Evaluate offspring fitness ─────────────────────────────────────────
-      const offspringFitness = offspring.map(ind => this._score(ind, src));
+      // Generate offspring
+      for (let c = elite; c < this.popSize; c++) {
+        // Tournament selection: two parents
+        const pA = pop[this._tournament(fits, K)];
+        const pB = pop[this._tournament(fits, K)];
 
-      // ── 7. Elitism + replacement ───────────────────────────────────────────────
-      // TODO: merge population + offspring, keep elite individuals, fill rest from offspring.
-      // Sort combined pool by fitness, take top this.popSize.
-      const combined        = [...population, ...offspring];
-      const combinedFitness = [...fitness, ...offspringFitness];
-      const order           = combinedFitness.map((f, i) => [f, i]).sort((a, b) => a[0] - b[0]);
-      population = order.slice(0, this.popSize).map(([, i]) => combined[i]);
-      fitness    = order.slice(0, this.popSize).map(([f])    => f);
+        // Uniform crossover: each line independently from pA or pB
+        // Build child.lines directly — no clone() overhead, share immutable style refs
+        const child = new VectorImage(W, H);
+        child.lines = new Array(lc);
+        for (let i = 0; i < lc; i++) {
+          const src = Math.random() < 0.5 ? pA : pB;
+          const l   = src.lines[i];
+          child.lines[i] = {
+            points: [
+              { x: l.points[0].x, y: l.points[0].y },
+              { x: l.points[1].x, y: l.points[1].y },
+            ],
+            style: l.style,  // immutable — safe to share reference across individuals
+          };
+        }
 
-      // ── 8. Progress reporting ──────────────────────────────────────────────────
+        // Mutation
+        for (let i = 0; i < lc; i++) {
+          if (Math.random() < mr) {
+            if (Math.random() < 0.2) {
+              // Replace line entirely (20% of mutations) — maintains diversity
+              const { points, style } = this._randomLine(W, H, diag);
+              child.lines[i] = { points, style };
+            } else {
+              // Nudge endpoints (80% of mutations) — fine-grained local search
+              const pts = child.lines[i].points;
+              pts[0] = {
+                x: Math.max(0, Math.min(W, pts[0].x + (Math.random() - 0.5) * 2 * amp)),
+                y: Math.max(0, Math.min(H, pts[0].y + (Math.random() - 0.5) * 2 * amp)),
+              };
+              pts[1] = {
+                x: Math.max(0, Math.min(W, pts[1].x + (Math.random() - 0.5) * 2 * amp)),
+                y: Math.max(0, Math.min(H, pts[1].y + (Math.random() - 0.5) * 2 * amp)),
+              };
+            }
+          }
+        }
+
+        nextPop[c]  = child;
+        nextFits[c] = evalScore(child);
+      }
+
+      pop  = nextPop;
+      fits = nextFits;
+
+      // Progress + preview every 5 generations
       if (gen % 5 === 0) {
-        this.onProgress?.(gen / this.generations, fitness[0]);
-        this.onPreview?.(this._rasterizeGS(population[0]), src.width, src.height);
-        await new Promise(r => setTimeout(r, 0)); // yield to UI thread
+        let bestIdx = 0;
+        for (let i = 1; i < this.popSize; i++) if (fits[i] < fits[bestIdx]) bestIdx = i;
+        this.onProgress?.(gen / this.generations, fits[bestIdx]);
+        this.onPreview?.(this._rasterizeGS(pop[bestIdx]), W, H);
+        await new Promise(r => setTimeout(r, 0));
       }
     }
 
-    this.onProgress?.(1, fitness[0]);
-    this.onPreview?.(this._rasterizeGS(population[0]), src.width, src.height);
+    // Final best
+    let bestIdx = 0;
+    for (let i = 1; i < this.popSize; i++) if (fits[i] < fits[bestIdx]) bestIdx = i;
+    this.onProgress?.(1, fits[bestIdx]);
+    this.onPreview?.(this._rasterizeGS(pop[bestIdx]), W, H);
 
-    const best = population[0];
+    const best = pop[bestIdx];
     if (src._widthCm)  best._widthCm  = src._widthCm;
     if (src._heightCm) best._heightCm = src._heightCm;
     this._setOutput('vector', best);
   }
 
-  // ── Stubs — fill these in ──────────────────────────────────────────────────
-
-  /**
-   * Tournament selection: pick `tournamentSize` individuals at random,
-   * return the one with the lowest (best) fitness score.
-   * Repeat popSize times to build a mating pool.
-   */
-  _tournamentSelect(population, fitness, tournamentSize) {
-    // TODO: implement proper tournament selection.
-    // For now just returns the whole population as the mating pool.
-    return population.slice();
+  // ── Tournament selection ───────────────────────────────────────────────────
+  // Samples k random indices, returns the one with lowest fitness.
+  _tournament(fits, k) {
+    let best = Math.floor(Math.random() * fits.length);
+    for (let i = 1; i < k; i++) {
+      const c = Math.floor(Math.random() * fits.length);
+      if (fits[c] < fits[best]) best = c;
+    }
+    return best;
   }
 
-  /**
-   * Crossover: given a mating pool, produce this.popSize offspring.
-   * Each offspring is produced by combining two random parents.
-   */
-  _crossover(matingPool, width, height) {
-    // TODO: implement single-point crossover on the lines array.
-    // Stub: offspring are clones of random parents (no actual crossover yet).
-    return Array.from({ length: this.popSize }, () => {
-      return matingPool[Math.floor(Math.random() * matingPool.length)].clone();
-    });
+  // ── Target downscaling ─────────────────────────────────────────────────────
+  // Draw source ImageData into a smaller canvas (browser bilinear), extract R channel.
+  _downscaleTarget(src, sw, sh) {
+    const tmp = new OffscreenCanvas(src.width, src.height);
+    tmp.getContext('2d').putImageData(src, 0, 0);
+    const small = new OffscreenCanvas(sw, sh);
+    small.getContext('2d').drawImage(tmp, 0, 0, sw, sh);
+    const data = small.getContext('2d').getImageData(0, 0, sw, sh).data;
+    const gs = new Uint8Array(sw * sh);
+    for (let i = 0; i < gs.length; i++) gs[i] = data[i * 4];
+    return gs;
   }
 
-  /**
-   * Mutation: perturb a random subset of lines in each individual in-place.
-   * `this.mutationRate` controls what fraction of lines are mutated.
-   */
-  _mutate(offspring, width, height) {
-    // TODO: for each individual, iterate lines, mutate with probability mutationRate.
-    // Perturbation idea: slightly shift endpoints (like hill-climb's maxAmplitude nudge),
-    // or replace the line entirely with a new random one.
-    // Stub: no mutation yet.
+  // ── Random individual ──────────────────────────────────────────────────────
+  _randomInd(W, H, diag) {
+    const ind = new VectorImage(W, H);
+    for (let i = 0; i < this.lineCount; i++) {
+      const { points, style } = this._randomLine(W, H, diag);
+      ind.addLine(points, style);
+    }
+    return ind;
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  _randomLine(width, height) {
-    const x1     = Math.random() * width;
-    const y1     = Math.random() * height;
-    const maxLen = Math.sqrt(width * width + height * height) * 0.4;
-    const len    = maxLen * (0.05 + Math.random() * 0.95);
-    const angle  = Math.random() * Math.PI * 2;
+  // ── Random line ────────────────────────────────────────────────────────────
+  _randomLine(W, H, diag) {
+    const x1    = Math.random() * W;
+    const y1    = Math.random() * H;
+    const len   = diag * (0.05 + Math.random() * 0.35);
+    const angle = Math.random() * Math.PI * 2;
     return {
       points: [
         { x: x1, y: y1 },
-        { x: Math.max(0, Math.min(width,  x1 + Math.cos(angle) * len)),
-          y: Math.max(0, Math.min(height, y1 + Math.sin(angle) * len)) },
+        { x: Math.max(0, Math.min(W, x1 + Math.cos(angle) * len)),
+          y: Math.max(0, Math.min(H, y1 + Math.sin(angle) * len)) },
       ],
       style: { width: this.penWidthPx, opacity: 1 },
     };
