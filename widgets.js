@@ -301,15 +301,40 @@ export class NodeWidget {
   }
 
   _buildShowPixelBufferContent() {
-    const scroll = document.createElement('div');
-    scroll.style.cssText = 'overflow:auto; max-width:300px; max-height:300px; margin:0 12px 8px; border-radius:4px; border:1px solid #e5e7eb;';
+    const wrap = document.createElement('div');
+    wrap.className = 'flex flex-col gap-1 pb-2';
 
     const canvas = document.createElement('canvas');
     canvas.style.cssText = 'display:block; image-rendering:pixelated;';
     this.node.previewCanvas = canvas;
+    wrap.appendChild(canvas);
 
-    scroll.appendChild(canvas);
-    return scroll;
+    // Download bar — shown once the canvas has content
+    const bar = document.createElement('div');
+    bar.className = 'flex gap-1 px-3';
+
+    const makeDownloadBtn = (label, mimeType, ext, quality) => {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.className = 'text-xs px-2 py-0.5 rounded border border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors cursor-pointer';
+      btn.addEventListener('click', () => {
+        if (!canvas.width || !canvas.height) return;
+        const url = quality != null
+          ? canvas.toDataURL(mimeType, quality)
+          : canvas.toDataURL(mimeType);
+        const a = document.createElement('a');
+        a.href     = url;
+        a.download = `image.${ext}`;
+        a.click();
+      });
+      return btn;
+    };
+
+    bar.appendChild(makeDownloadBtn('↓ PNG', 'image/png',  'png'));
+    bar.appendChild(makeDownloadBtn('↓ JPG', 'image/jpeg', 'jpg', 0.92));
+    wrap.appendChild(bar);
+
+    return wrap;
   }
 
   _buildImageDiffContent() {
