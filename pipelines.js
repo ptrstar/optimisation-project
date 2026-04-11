@@ -19,6 +19,7 @@ import { PixelToVector }        from './nodes/PixelToVector.js';
 import { SobelGradient }        from './nodes/SobelGradient.js';
 import { Blur }                 from './nodes/Blur.js';
 import { InvertImage }          from './nodes/InvertImage.js';
+import { OptStipple }           from './nodes/OptStipple.js';
 
 // Registry: type-name string → class. Add new node classes here.
 const NODE_CLASSES = {
@@ -36,6 +37,7 @@ const NODE_CLASSES = {
   SobelGradient,
   Blur,
   InvertImage,
+  OptStipple,
 };
 
 // ── Serialise ──────────────────────────────────────────────────────────────
@@ -156,8 +158,16 @@ const PRESET_GREEDY = {
   edges: _optPresetEdges('opt-5'),
 };
 
+const PRESET_STIPPLE = {
+  nodes: _optPresetNodes('opt-5', 'OptStipple', {
+    dotCount: 300, iterations: 20, dotRadius: 3, varyRadius: 0.5, scoreScale: 0.2,
+  }),
+  edges: _optPresetEdges('opt-5'),
+};
+
 export const PRESETS = [
-  { name: 'Hill Climb',       pipeline: PRESET_HILL_CLIMB },
-  { name: 'Genetic',          pipeline: PRESET_GENETIC    },
-  { name: 'Greedy Sequential',pipeline: PRESET_GREEDY     },
+  { name: 'Hill Climb',        pipeline: PRESET_HILL_CLIMB },
+  { name: 'Genetic',           pipeline: PRESET_GENETIC    },
+  { name: 'Greedy Sequential', pipeline: PRESET_GREEDY     },
+  { name: 'Stipple',           pipeline: PRESET_STIPPLE    },
 ];

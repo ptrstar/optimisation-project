@@ -8,6 +8,7 @@ import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { InvertImage }          from './nodes/InvertImage.js';
+import { OptStipple }           from './nodes/OptStipple.js';
 import { Rasterize }       from './nodes/Rasterize.js';
 import { ImageDiff }       from './nodes/ImageDiff.js';
 import { CanvasSetup }     from './nodes/CanvasSetup.js';
@@ -24,6 +25,7 @@ const NODE_REGISTRY = [
   { label: 'Opt: Genetic',           cls: OptGenetic          },
   { label: 'Opt: Greedy Sequential', cls: OptGreedySequential },
   { label: 'Invert Image',           cls: InvertImage         },
+  { label: 'Opt: Stipple',           cls: OptStipple          },
   { label: 'Rasterize',       cls: Rasterize        },
   { label: 'Image Diff',      cls: ImageDiff        },
   { label: 'Sobel Gradient',  cls: SobelGradient    },

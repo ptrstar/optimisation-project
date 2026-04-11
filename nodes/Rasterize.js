@@ -33,6 +33,7 @@ export class Rasterize extends BaseNode {
       if (!points || points.length < 2) continue;
       ctx.lineWidth   = style.width   ?? 1;
       ctx.globalAlpha = style.opacity ?? 1;
+      ctx.lineCap     = style.lineCap ?? 'butt';
       ctx.beginPath();
       ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
