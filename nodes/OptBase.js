@@ -9,8 +9,18 @@ import { Rasterize }   from './Rasterize.js';
  *   - Standard gs_rasterimage → vectorimage I/O schema
  *   - onProgress / onPreview hooks (wired by buildContent)
  *   - _rasterizeGS(vector) and _score(vector, target) backed by Rasterize.renderToGS
+ *   - _blurBuffer(src, w, h, radius) — O(n) box blur on flat Uint8Array
+ *   - _downscaleTarget(src, sw, sh) — shrink a gs_rasterimage to a flat Uint8Array
+ *   - _randomLine(W, H, diag) — random stroke using shared line-shape properties
  *   - Auto getParams / setParams derived from this.paramDefs
  *   - buildContent(widget) — standard UI: param inputs + progress bar + live preview
+ *
+ * Shared line-shape properties (set defaults here, override in subclass constructor):
+ *   penWidthPx    — stroke width in full-resolution pixels
+ *   minLenFrac    — minimum stroke length as a fraction of the image diagonal
+ *   maxLenFrac    — maximum stroke length as a fraction of the image diagonal
+ *   lineOpacity   — centre opacity (0–1); jittered by ±opacityJitter
+ *   opacityJitter — half-range of random opacity variation (0 = fixed opacity)
  *
  * To create a new opt node:
  *   1. Extend OptBase
@@ -36,6 +46,13 @@ export class OptBase extends BaseNode {
     // buildContent() and getParams()/setParams() are derived from this automatically.
     // Example: { label: 'Rounds', key: 'rounds', min: 10, max: 10000, step: 10 }
     this.paramDefs = [];
+
+    // Shared line-shape defaults — subclasses override these in their constructor.
+    this.penWidthPx    = 2;
+    this.minLenFrac    = 0.02;   // 2% of diagonal
+    this.maxLenFrac    = 0.4;    // 40% of diagonal
+    this.lineOpacity   = 1.0;
+    this.opacityJitter = 0.0;    // half-range; 0 = fixed opacity
   }
 
   // ── Shared utilities ────────────────────────────────────────────────────────
@@ -43,6 +60,48 @@ export class OptBase extends BaseNode {
   // Render vector to single-channel Uint8Array (delegates to Rasterize static).
   _rasterizeGS(vector) {
     return Rasterize.renderToGS(vector);
+  }
+
+  /**
+   * Produce a random line using the shared line-shape properties.
+   * Returns { points: [{x,y},{x,y}], style: {width, opacity} }.
+   * Coordinates are in full-resolution pixels (W × H space).
+   *
+   * @param {number} W    – canvas width in pixels
+   * @param {number} H    – canvas height in pixels
+   * @param {number} diag – Math.sqrt(W*W + H*H), pre-computed by caller
+   */
+  _randomLine(W, H, diag) {
+    const x1    = Math.random() * W;
+    const y1    = Math.random() * H;
+    const len   = diag * (this.minLenFrac + Math.random() * (this.maxLenFrac - this.minLenFrac));
+    const angle = Math.random() * Math.PI * 2;
+    const jitter  = this.opacityJitter * 2 * (Math.random() - 0.5);
+    const opacity = Math.max(0.05, Math.min(1, this.lineOpacity + jitter));
+    return {
+      points: [
+        { x: x1, y: y1 },
+        { x: Math.max(0, Math.min(W, x1 + Math.cos(angle) * len)),
+          y: Math.max(0, Math.min(H, y1 + Math.sin(angle) * len)) },
+      ],
+      style: { width: this.penWidthPx, opacity },
+    };
+  }
+
+  /**
+   * Downscale a gs_rasterimage to a flat Uint8Array at the given pixel dimensions.
+   * Uses the browser's bilinear downscale via OffscreenCanvas.
+   * Result contains one byte per pixel (R channel = luminance, 0=black 255=white).
+   */
+  _downscaleTarget(src, sw, sh) {
+    const tmp = new OffscreenCanvas(src.width, src.height);
+    tmp.getContext('2d').putImageData(src, 0, 0);
+    const small = new OffscreenCanvas(sw, sh);
+    small.getContext('2d').drawImage(tmp, 0, 0, sw, sh);
+    const data = small.getContext('2d').getImageData(0, 0, sw, sh).data;
+    const gs   = new Uint8Array(sw * sh);
+    for (let i = 0; i < gs.length; i++) gs[i] = data[i * 4];
+    return gs;
   }
 
   /**

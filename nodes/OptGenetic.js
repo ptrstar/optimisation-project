@@ -21,11 +21,13 @@ export class OptGenetic extends OptBase {
     this.popSize      = 30;
     this.lineCount    = 100;
     this.penWidthPx   = 2;
-    this.mutationRate = 0.05;  // probability of mutating each line per individual
-    this.mutationAmp  = 20;    // max endpoint displacement per nudge mutation (pixels)
-    this.eliteCount   = 2;     // top-N individuals carried unchanged each generation
-    this.tournamentK  = 3;     // rivals per tournament draw
-    this.scoreScale   = 0.5;   // scoring resolution relative to source (0.1–1.0)
+    this.mutationRate = 0.05;
+    this.mutationAmp  = 20;
+    this.eliteCount   = 2;
+    this.tournamentK  = 3;
+    this.scoreScale   = 0.5;
+    this.minLenFrac   = 0.05;  // preserve original 5%–40% diagonal range
+    // maxLenFrac = 0.4, lineOpacity = 1.0 — inherited OptBase defaults
 
     this.paramDefs = [
       { label: 'Generations',    key: 'generations',  min: 10,   max: 2000, step: 10 },
@@ -199,19 +201,6 @@ export class OptGenetic extends OptBase {
     return best;
   }
 
-  // ── Target downscaling ─────────────────────────────────────────────────────
-  // Draw source ImageData into a smaller canvas (browser bilinear), extract R channel.
-  _downscaleTarget(src, sw, sh) {
-    const tmp = new OffscreenCanvas(src.width, src.height);
-    tmp.getContext('2d').putImageData(src, 0, 0);
-    const small = new OffscreenCanvas(sw, sh);
-    small.getContext('2d').drawImage(tmp, 0, 0, sw, sh);
-    const data = small.getContext('2d').getImageData(0, 0, sw, sh).data;
-    const gs = new Uint8Array(sw * sh);
-    for (let i = 0; i < gs.length; i++) gs[i] = data[i * 4];
-    return gs;
-  }
-
   // ── Random individual ──────────────────────────────────────────────────────
   _randomInd(W, H, diag) {
     const ind = new VectorImage(W, H);
@@ -220,21 +209,5 @@ export class OptGenetic extends OptBase {
       ind.addLine(points, style);
     }
     return ind;
-  }
-
-  // ── Random line ────────────────────────────────────────────────────────────
-  _randomLine(W, H, diag) {
-    const x1    = Math.random() * W;
-    const y1    = Math.random() * H;
-    const len   = diag * (0.05 + Math.random() * 0.35);
-    const angle = Math.random() * Math.PI * 2;
-    return {
-      points: [
-        { x: x1, y: y1 },
-        { x: Math.max(0, Math.min(W, x1 + Math.cos(angle) * len)),
-          y: Math.max(0, Math.min(H, y1 + Math.sin(angle) * len)) },
-      ],
-      style: { width: this.penWidthPx, opacity: 1 },
-    };
   }
 }

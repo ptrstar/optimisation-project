@@ -96,7 +96,11 @@ export class OptGreedySequential extends OptBase {
       let found = false;
 
       for (let c = 0; c < this.candidates; c++) {
-        const { sx1, sy1, sx2, sy2 } = this._randomLine(sw, sh, diag);
+        // Sample in score-space by passing score-scale dimensions to _randomLine.
+        // Fractions (minLenFrac, maxLenFrac) are scale-invariant so lengths stay correct.
+        const { points } = this._randomLine(sw, sh, diag);
+        const sx1 = points[0].x, sy1 = points[0].y;
+        const sx2 = points[1].x, sy2 = points[1].y;
         const delta = this._evalDelta(
           current, target, blurredTarget,
           sx1, sy1, sx2, sy2,
@@ -233,26 +237,5 @@ export class OptGreedySequential extends OptBase {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  _randomLine(sw, sh, diag) {
-    const sx1   = Math.random() * sw;
-    const sy1   = Math.random() * sh;
-    const len   = diag * (0.02 + Math.random() * (this.maxLenFrac - 0.02));
-    const angle = Math.random() * Math.PI * 2;
-    return {
-      sx1, sy1,
-      sx2: Math.max(0, Math.min(sw, sx1 + Math.cos(angle) * len)),
-      sy2: Math.max(0, Math.min(sh, sy1 + Math.sin(angle) * len)),
-    };
-  }
-
-  _downscaleTarget(src, sw, sh) {
-    const tmp = new OffscreenCanvas(src.width, src.height);
-    tmp.getContext('2d').putImageData(src, 0, 0);
-    const small = new OffscreenCanvas(sw, sh);
-    small.getContext('2d').drawImage(tmp, 0, 0, sw, sh);
-    const data = small.getContext('2d').getImageData(0, 0, sw, sh).data;
-    const gs   = new Uint8Array(sw * sh);
-    for (let i = 0; i < gs.length; i++) gs[i] = data[i * 4];
-    return gs;
-  }
+  // _randomLine and _downscaleTarget are inherited from OptBase.
 }
