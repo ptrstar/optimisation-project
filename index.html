@@ -73,13 +73,21 @@
   <div
     id="graph-container"
     class="flex-1 relative overflow-hidden bg-gray-50"
-    style="background-image: radial-gradient(#d1d5db 1px, transparent 1px); background-size: 24px 24px;"
+    style="background-image: radial-gradient(#d1d5db 1px, transparent 1px); background-size: 24px 24px; cursor: grab;"
   >
-    <!-- Edge canvas (behind nodes) -->
-    <canvas id="edges" class="absolute inset-0 pointer-events-none"></canvas>
+    <!--
+      #viewport is the single transform target for panning.
+      Both the edge canvas and node cards live inside it so they
+      translate together — edge coordinates stay correct with no
+      changes to drawEdges() or getPortPosition().
+    -->
+    <div id="viewport" style="position:absolute; inset:0; transform-origin:0 0; will-change:transform;">
+      <!-- Edge canvas (behind nodes) -->
+      <canvas id="edges" class="absolute inset-0 pointer-events-none"></canvas>
 
-    <!-- Node cards -->
-    <div id="graph" class="absolute inset-0" style="overflow:visible;"></div>
+      <!-- Node cards -->
+      <div id="graph" class="absolute inset-0" style="overflow:visible;"></div>
+    </div>
   </div>
 
   <!-- Toast notification -->

@@ -33,14 +33,44 @@ const NODE_REGISTRY = [
 ];
 
 // DOM refs
-const canvasEl   = document.getElementById('edges');
-const graphEl    = document.getElementById('graph');
-const paletteEl  = document.getElementById('node-palette');
-const presetsEl  = document.getElementById('presets-list');
-const runBtn     = document.getElementById('run-btn');
-const exportBtn  = document.getElementById('export-btn');
+const canvasEl        = document.getElementById('edges');
+const graphEl         = document.getElementById('graph');
+const paletteEl       = document.getElementById('node-palette');
+const presetsEl       = document.getElementById('presets-list');
+const runBtn          = document.getElementById('run-btn');
+const exportBtn       = document.getElementById('export-btn');
+const graphContainer  = document.getElementById('graph-container');
+const viewportEl      = document.getElementById('viewport');
 
 const pipeline = new Pipeline(canvasEl, graphEl);
+
+// ── Canvas panning ────────────────────────────────────────────────────────────
+let panX = 0, panY = 0, isPanning = false, panStartX = 0, panStartY = 0;
+
+graphContainer.addEventListener('mousedown', (e) => {
+  // Only pan when clicking on the empty background (not nodes, ports, or mid-connection)
+  if (e.target !== graphEl && e.target !== graphContainer && e.target !== canvasEl) return;
+  if (pendingConn) return;
+  isPanning = true;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  graphContainer.style.cursor = 'grabbing';
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isPanning) return;
+  panX = e.clientX - panStartX;
+  panY = e.clientY - panStartY;
+  viewportEl.style.transform = `translate(${panX}px, ${panY}px)`;
+  graphContainer.style.backgroundPosition = `${panX % 24}px ${panY % 24}px`;
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isPanning) return;
+  isPanning = false;
+  graphContainer.style.cursor = 'grab';
+});
 
 // ── Auto-run toggle ──────────────────────────────────────────────────────────
 let autoRun = true;
