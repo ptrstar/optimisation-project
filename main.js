@@ -6,6 +6,7 @@ import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
 import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
+import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { InvertImage }          from './nodes/InvertImage.js';
 import { OptStipple }           from './nodes/OptStipple.js';
@@ -23,6 +24,7 @@ const NODE_REGISTRY = [
   { label: 'Show Buffer',     cls: ShowPixelBuffer  },
   { label: 'Opt: Hill Climb',        cls: OptHillClimb        },
   { label: 'Opt: Genetic',           cls: OptGenetic          },
+  { label: 'Opt: Needle',             cls: OptNeedle           },
   { label: 'Opt: Greedy Sequential', cls: OptGreedySequential },
   { label: 'Invert Image',           cls: InvertImage         },
   { label: 'Opt: Stipple',           cls: OptStipple          },

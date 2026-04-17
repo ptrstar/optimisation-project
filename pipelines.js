@@ -11,6 +11,7 @@ import { Contrast }             from './nodes/Contrast.js';
 import { ShowPixelBuffer }      from './nodes/ShowPixelBuffer.js';
 import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
+import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { Rasterize }            from './nodes/Rasterize.js';
 import { ImageDiff }            from './nodes/ImageDiff.js';
@@ -29,6 +30,7 @@ const NODE_CLASSES = {
   ShowPixelBuffer,
   OptHillClimb,
   OptGenetic,
+  OptNeedle,
   OptGreedySequential,
   Rasterize,
   ImageDiff,
@@ -113,7 +115,7 @@ export function loadPreset(pipeline, preset) {
 
 // Shared node layout used by all opt presets — only the opt node type/params differ.
 const _optPresetNodes = (optId, optType, optParams) => ([
-  { id: 'canvassetup-0',   type: 'CanvasSetup',     x: 40,   y: 40,  params: { widthCm: 4, heightCm: 4, dpi: 96, penWidthMm: 0.7 } },
+  { id: 'canvassetup-0',   type: 'CanvasSetup',     x: 40,   y: 40,  params: { widthCm: 20, heightCm: 20, dpi: 96, penWidthMm: 0.7 } },
   { id: 'imageuploader-1', type: 'ImageUploader',   x: 40,   y: 260, params: { fitMode: 'fit' } },
   { id: 'contrast-2',      type: 'Contrast',        x: 310,  y: 260, params: { amount: 1.2 } },
   { id: 'grayscale-3',     type: 'Grayscale',       x: 580,  y: 260, params: {} },
@@ -161,6 +163,13 @@ const PRESET_GREEDY = {
 const PRESET_STIPPLE = {
   nodes: _optPresetNodes('opt-5', 'OptStipple', {
     dotCount: 300, iterations: 20, dotRadius: 3, varyRadius: 0.5, scoreScale: 0.2,
+  }),
+  edges: _optPresetEdges('opt-5'),
+};
+
+const PRESET_NEEDLE = {
+  nodes: _optPresetNodes('opt-5', 'OptNeedle', {
+    rounds: 5000, lineCount: 200, penWidthPx: 2, scoreScale: 0.5,
   }),
   edges: _optPresetEdges('opt-5'),
 };
@@ -225,5 +234,6 @@ export const PRESETS = [
   { name: 'Genetic',           pipeline: PRESET_GENETIC    },
   { name: 'Greedy Sequential', pipeline: PRESET_GREEDY     },
   { name: 'Stipple',           pipeline: PRESET_STIPPLE    },
+  { name: 'Needle',            pipeline: PRESET_NEEDLE     },
   { name: 'Compare All',       pipeline: PRESET_COMPARE    },
 ];

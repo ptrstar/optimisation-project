@@ -27,10 +27,14 @@ nodes/
   Contrast.js
   Blur.js           — separable box blur: gs_rasterimage → gs_rasterimage
   SobelGradient.js  — Sobel edge magnitude: gs_rasterimage → gs_rasterimage
+  InvertImage.js    — inverts pixel values: gs_rasterimage → gs_rasterimage
   ShowPixelBuffer.js
   PixelToVector.js  — legacy stochastic hill-climb: gs_rasterimage → vectorimage
   OptHillClimb.js   — hill-climb optimisation (extends OptBase)
   OptGenetic.js     — genetic algorithm optimisation (extends OptBase)
+  OptGreedySequential.js — greedy one-line-at-a-time with blur scoring + Sobel-biased placement (extends OptBase)
+  OptStipple.js     — weighted Voronoi stippling via Lloyd's relaxation (extends OptBase)
+  OptNeedle.js      — template node with local blur scoring infrastructure (extends OptBase)
   Rasterize.js      — vectorimage → rgba_rasterimage; also exposes static render helpers
   ImageDiff.js      — per-pixel MAE fitness node
 formats/
@@ -86,6 +90,9 @@ Extends `BaseNode`. All opt nodes should extend this instead of `BaseNode` direc
 - `this.onProgress` / `this.onPreview` callbacks — wired by `buildContent`, call from `run()`
 - `this._rasterizeGS(vector)` → `Uint8Array` — delegates to `Rasterize.renderToGS`
 - `this._score(vector, gsTarget)` → MAE number — delegates to `Rasterize.renderToGS`
+- `this._blurBuffer(src, w, h, radius)` → `Uint8Array` — O(n) separable box blur on a flat Uint8Array; allocates and returns a new buffer
+- `this._downscaleTarget(src, sw, sh)` → `Uint8Array` — bilinear downscale of a `gs_rasterimage` to `sw×sh`, returns flat single-channel array
+- `this._randomLine(W, H, diag)` → `{ points, style }` — random stroke using shared line-shape properties (`minLenFrac`, `maxLenFrac`, `lineOpacity`, `opacityJitter`)
 - `getParams()` / `setParams(p)` — auto-derived from `this.paramDefs`
 - `buildContent(widget)` — generates number inputs from `paramDefs`, progress bar, live preview canvas, and wires `onProgress`/`onPreview` callbacks
 
@@ -112,9 +119,13 @@ Extends `BaseNode`. All opt nodes should extend this instead of `BaseNode` direc
 | `Contrast` | `image: rgba_rasterimage`, `amount: scalar` | `image: rgba_rasterimage` | `(px−128)×amount+128`, clamp. `amount` defaults to `1.0`. |
 | `Blur` | `image: gs_rasterimage` | `image: gs_rasterimage` | Separable two-pass box blur. `radius` param (slider, default 3px). |
 | `SobelGradient` | `image: gs_rasterimage` | `image: gs_rasterimage` | Sobel 3×3 kernels on R channel; output brightness = gradient magnitude. |
+| `InvertImage` | `image: gs_rasterimage` | `image: gs_rasterimage` | Pixel-wise invert: `255 - v`. |
 | `ShowPixelBuffer` | `image: rgba_rasterimage`, `config: canvas_config` | — | Writes `ImageData` to `this.previewCanvas`. If `config` connected, sets CSS `width/height` in `cm`. |
 | `OptHillClimb` | `image: gs_rasterimage` | `vector: vectorimage` | Stochastic hill-climb. Starts with `lineCount` random lines, nudges endpoints each round. Extends `OptBase`. |
 | `OptGenetic` | `image: gs_rasterimage` | `vector: vectorimage` | Genetic algorithm. See below. Extends `OptBase`. |
+| `OptGreedySequential` | `image: gs_rasterimage` | `vector: vectorimage` | Greedy one-line-at-a-time placement. See below. Extends `OptBase`. |
+| `OptStipple` | `image: gs_rasterimage` | `vector: vectorimage` | Weighted Voronoi stippling via Lloyd's relaxation. See below. Extends `OptBase`. |
+| `OptNeedle` | `image: gs_rasterimage` | `vector: vectorimage` | Template node with local blur scoring infrastructure. Algorithm TODO. Extends `OptBase`. |
 | `PixelToVector` | `image: gs_rasterimage` | `vector: vectorimage` | Legacy random-candidate hill-climb. Superseded by `OptHillClimb`. |
 | `Rasterize` | `vector: vectorimage` | `image: rgba_rasterimage` | White canvas, black polylines at `style.width` / `style.opacity`. |
 | `ImageDiff` | `imageA: rgba_rasterimage`, `imageB: rgba_rasterimage` | `diff: rgba_rasterimage`, `score: scalar` | Per-pixel MAE; `score` is the fitness value. |
@@ -123,7 +134,7 @@ Extends `BaseNode`. All opt nodes should extend this instead of `BaseNode` direc
 
 Initialises `lineCount` random lines, then each round picks a random line and nudges both endpoints by up to `maxAmplitude` pixels. Keeps the move if it reduces MAE score.
 
-Params exposed via `paramDefs`: `rounds`, `penWidthPx`, `lineCount`, `maxAmplitude`.
+Params exposed via `paramDefs`: `rounds`, `penWidthPx`, `lineCount`, `maxAmplitude`, `scoreScale`.
 
 ### `OptGenetic` — genetic algorithm optimisation
 
@@ -137,6 +148,69 @@ Tournament selection + uniform crossover + nudge/replace mutation + elitism.
 - Fitness stored in `Float32Array`.
 
 Params: `generations`, `popSize`, `lineCount`, `penWidthPx`, `mutationRate`, `mutationAmp`, `eliteCount`, `tournamentK`, `scoreScale`.
+
+### `OptGreedySequential` — greedy line placement with blur scoring
+
+Places one line at a time. For each new line, `candidates` random strokes are evaluated and the one that most reduces the **blur-MAE** is committed.
+
+**Scoring — local blur patch:**
+- Maintains `current` (crisp render) and `currentBlur` (box-blurred view of `current`).
+- Fitness = MAE of `currentBlur` vs `targetGS` (raw downscaled input). This mimics perceptual distance: dense lines blur into gray that should match the target gray level.
+- Per candidate: `saveRegion` → `_applyLine` → `reblurLocal` → `scoreDelta` → `restoreRegion`. No full-buffer re-blur; update is O(patch × blurR).
+- `reblurLocal` is mathematically exact: only pixels within `blurR` of the drawn line can change in `currentBlur`. Computing them reads from the full (correct) `current` buffer.
+
+**Sobel-biased line placement:**
+- Sobel `gx`/`gy` arrays are precomputed from `targetGS` once at the start.
+- Each candidate samples the gradient at its centre point. Angular spread around the gradient direction shrinks with gradient strength × `gradBias`. At `gradBias=1` and a strong edge, lines are fully contour-aligned; at `gradBias=0` placement is purely random.
+- `+π/2` rotation applied to gradient angle so strokes run *along* contours (iso-intensity lines) rather than across them.
+
+Params: `lineCount`, `candidates`, `penWidthPx`, `scoreScale`, `maxLenFrac`, `lineOpacity`, `blurRadius`, `gradBias`.
+
+### `OptStipple` — weighted Voronoi stippling
+
+Approximates the target with N filled circular dots via Lloyd's relaxation.
+
+1. Importance-sample initial dot positions from a darkness-weighted CDF.
+2. Each iteration: brute-force Voronoi assignment (O(N × dotCount)), weighted centroid move.
+3. Build `VectorImage`: each dot → tiny horizontal segment with `lineCap:'round'` → filled circle. Radius optionally scales with per-cell darkness (`varyRadius`).
+
+Params: `dotCount`, `iterations`, `dotRadius`, `varyRadius`, `scoreScale`.
+
+### `OptNeedle` — local blur scoring template
+
+Scaffolding for a new algorithm. Provides the full local-blur scoring infrastructure (same pattern as `OptGreedySequential`) with the algorithm loop left as a TODO.
+
+**Infrastructure provided in `run()`:**
+- `targetGS` — downscaled target, fixed.
+- `current` / `currentBlur` — crisp and blurred render buffers.
+- `scratch` / `scratchBlur` — region rollback buffers (pre-allocated, no inner-loop allocation).
+- `blurTmp` — `Float32Array` H-pass scratch for `reblurLocal`.
+- `lineBBox(x1,y1,x2,y2,r)` — bounding box of a score-space segment.
+- `saveRegion(bbox)` / `restoreRegion(bbox)` — copy line bbox of `current` and blur-expanded bbox of `currentBlur` to/from scratch.
+- `reblurLocal(bbox)` — exact local blur update of `currentBlur` (O(patch × blurR), no heap allocation).
+- `scoreDelta(bbox)` → number — MAE delta of `currentBlur` vs `targetGS` over the blur patch; negative = improvement. Uses `scratchBlur` as the pre-draw baseline.
+
+**UI:** Overrides `buildContent` to add a second preview canvas (blue border) wired to `this.onPreviewBlur`. Call `this.onPreviewBlur?.(currentBlur.slice(), sw, sh)` alongside `onPreview` to show both buffers live.
+
+Params: `rounds`, `lineCount`, `penWidthPx`, `blurRadius`, `scoreScale`, `minLenFrac`, `maxLenFrac`.
+
+---
+
+## Local Blur Scoring Pattern
+
+Both `OptGreedySequential` and `OptNeedle` use the same incremental blur-scoring approach. The key insight: **comparing `currentBlur` against `targetGS`** (not a pre-blurred target) mimics the human eye's perception of densely hatched lines at a distance — many thin lines close together blur into a gray that should match the target gray level.
+
+**Per-iteration pattern:**
+```js
+const bbox = lineBBox(sx1, sy1, sx2, sy2, penW);
+saveRegion(bbox);                        // O(A + A_blur) — copy only affected pixels
+_applyLine / _drawLine(...)             // O(A)
+reblurLocal(bbox);                       // O(A_blur × blurR) — exact, no full re-blur
+const delta = scoreDelta(bbox);          // O(A_blur) — MAE delta vs targetGS
+if (reject) restoreRegion(bbox);         // O(A + A_blur)
+```
+
+`reblurLocal` is exact (not an approximation) because the blur kernel for any pixel outside `bbox ± blurR` reads only from unchanged parts of `current`.
 
 ---
 
@@ -193,7 +267,8 @@ Node-specific content:
 - `Contrast` — range slider `[0–3]`, live label. Fires `node-param-changed` on input.
 - `ShowPixelBuffer` — scrollable container (max 300×300px) with canvas.
 - `Blur` — radius slider `[0–20]` via `buildContent` on the node class itself.
-- `OptHillClimb` / `OptGenetic` — auto-generated from `paramDefs` via `OptBase.buildContent`: number inputs + progress bar + live preview.
+- `OptHillClimb` / `OptGenetic` / `OptGreedySequential` / `OptStipple` — auto-generated from `paramDefs` via `OptBase.buildContent`: number inputs + progress bar + live preview.
+- `OptNeedle` — overrides `buildContent`: calls `super.buildContent` then appends a second canvas (blue border) for `currentBlur` preview, wired to `this.onPreviewBlur`.
 - `ImageDiff` — score label + diff canvas.
 
 ---
