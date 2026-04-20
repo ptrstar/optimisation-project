@@ -13,6 +13,7 @@ import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
+import { OptGreedyPoints }      from './nodes/OptGreedyPoints.js';
 import { Rasterize }            from './nodes/Rasterize.js';
 import { ImageDiff }            from './nodes/ImageDiff.js';
 import { CanvasSetup }          from './nodes/CanvasSetup.js';
@@ -32,6 +33,7 @@ const NODE_CLASSES = {
   OptGenetic,
   OptNeedle,
   OptGreedySequential,
+  OptGreedyPoints,
   Rasterize,
   ImageDiff,
   CanvasSetup,
