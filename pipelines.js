@@ -14,6 +14,7 @@ import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { OptGreedyPoints }      from './nodes/OptGreedyPoints.js';
+import { OptWiggle }            from './nodes/OptWiggle.js';
 import { Rasterize }            from './nodes/Rasterize.js';
 import { ImageDiff }            from './nodes/ImageDiff.js';
 import { CanvasSetup }          from './nodes/CanvasSetup.js';
@@ -34,6 +35,7 @@ const NODE_CLASSES = {
   OptNeedle,
   OptGreedySequential,
   OptGreedyPoints,
+  OptWiggle,
   Rasterize,
   ImageDiff,
   CanvasSetup,
@@ -176,6 +178,31 @@ const PRESET_NEEDLE = {
   edges: _optPresetEdges('opt-5'),
 };
 
+const PRESET_GREEDY_POINTS_WIGGLE = {
+  nodes: [
+    { id: 'canvassetup-0',   type: 'CanvasSetup',      x: 40,   y: 40,  params: { widthCm: 20, heightCm: 20, dpi: 96, penWidthMm: 0.7 } },
+    { id: 'imageuploader-1', type: 'ImageUploader',    x: 40,   y: 260, params: { fitMode: 'fit' } },
+    { id: 'contrast-2',      type: 'Contrast',         x: 310,  y: 260, params: { amount: 1.2 } },
+    { id: 'grayscale-3',     type: 'Grayscale',        x: 580,  y: 260, params: {} },
+    { id: 'showbuffer-4',    type: 'ShowPixelBuffer',  x: 850,  y: 260, params: {} },
+    { id: 'greedypts-5',     type: 'OptGreedyPoints',  x: 580,  y: 480, params: { maxPoints: 500, candidates: 200, stepRadius: 0.05, penWidthPx: 2, lineOpacity: 1.0, blurRadius: 8, scoreScale: 0.5, directionBias: 0.6, acceptanceProb: 0.1, initCandidates: 20 } },
+    { id: 'wiggle-6',        type: 'OptWiggle',        x: 580,  y: 720, params: { rounds: 2000, candidates: 100, wiggleRadius: 0.05, penWidthPx: 2, lineOpacity: 1.0, blurRadius: 8, scoreScale: 0.5 } },
+    { id: 'rasterize-7',     type: 'Rasterize',        x: 850,  y: 720, params: {} },
+    { id: 'showbuffer-8',    type: 'ShowPixelBuffer',  x: 1120, y: 720, params: {} },
+  ],
+  edges: [
+    { from: 'canvassetup-0',   fromPort: 'config',  to: 'imageuploader-1', toPort: 'config' },
+    { from: 'imageuploader-1', fromPort: 'image',   to: 'contrast-2',      toPort: 'image'  },
+    { from: 'contrast-2',      fromPort: 'image',   to: 'grayscale-3',     toPort: 'image'  },
+    { from: 'grayscale-3',     fromPort: 'image',   to: 'showbuffer-4',    toPort: 'image'  },
+    { from: 'grayscale-3',     fromPort: 'image',   to: 'greedypts-5',     toPort: 'image'  },
+    { from: 'greedypts-5',     fromPort: 'vector',  to: 'wiggle-6',        toPort: 'vector' },
+    { from: 'grayscale-3',     fromPort: 'image',   to: 'wiggle-6',        toPort: 'image'  },
+    { from: 'wiggle-6',        fromPort: 'vector',  to: 'rasterize-7',     toPort: 'vector' },
+    { from: 'rasterize-7',     fromPort: 'image',   to: 'showbuffer-8',    toPort: 'image'  },
+  ],
+};
+
 // ── Compare-all preset ──────────────────────────────────────────────────────
 // Top row: full preprocessing chain (CanvasSetup → Grayscale → ShowPixelBuffer).
 // Below it, one unconnected Opt → Rasterize → ShowPixelBuffer chain per algorithm,
@@ -237,5 +264,6 @@ export const PRESETS = [
   { name: 'Greedy Sequential', pipeline: PRESET_GREEDY     },
   { name: 'Stipple',           pipeline: PRESET_STIPPLE    },
   { name: 'Needle',            pipeline: PRESET_NEEDLE     },
-  { name: 'Compare All',       pipeline: PRESET_COMPARE    },
+  { name: 'Greedy Points + Wiggle', pipeline: PRESET_GREEDY_POINTS_WIGGLE },
+  { name: 'Compare All',            pipeline: PRESET_COMPARE    },
 ];

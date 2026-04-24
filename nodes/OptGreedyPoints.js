@@ -218,7 +218,8 @@ export class OptGreedyPoints extends OptBase {
         const cx    = Math.max(0, Math.min(sw - 1, cxRaw));
         const cy    = Math.max(0, Math.min(sh - 1, cyRaw));
         const ox    = cxRaw - cx, oy = cyRaw - cy;
-        const wallPenalty = (ox * ox + oy * oy) * wallK;
+        const outside = Math.abs(ox) > 0.001 || Math.abs(oy) > 0.001;
+        const wallPenalty = (ox * ox + oy * oy) * wallK + (outside ? 100000 : 0);
 
         const bbox = lineBBox(tailX, tailY, cx, cy, penW);
         saveRegion(bbox);

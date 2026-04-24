@@ -9,6 +9,7 @@ import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { OptGreedyPoints }      from './nodes/OptGreedyPoints.js';
+import { OptWiggle }            from './nodes/OptWiggle.js';
 import { InvertImage }          from './nodes/InvertImage.js';
 import { OptStipple }           from './nodes/OptStipple.js';
 import { Rasterize }       from './nodes/Rasterize.js';
@@ -28,6 +29,7 @@ const NODE_REGISTRY = [
   { label: 'Opt: Needle',             cls: OptNeedle           },
   { label: 'Opt: Greedy Sequential', cls: OptGreedySequential },
   { label: 'Opt: Greedy Points',     cls: OptGreedyPoints     },
+  { label: 'Opt: Wiggle',            cls: OptWiggle           },
   { label: 'Invert Image',           cls: InvertImage         },
   { label: 'Opt: Stipple',           cls: OptStipple          },
   { label: 'Rasterize',       cls: Rasterize        },
