@@ -60,21 +60,67 @@ Click **Export to Console** — this prints the current pipeline as JSON to the 
 
 ## Optimisation nodes
 
-| Node | What it does |
-|---|---|
-| **OptGreedySequential** | Places one line at a time, keeping each stroke only if it reduces the error. Uses blur-based scoring so dense hatching blurs into the right gray level. Usually the best quality. |
-| **OptHillClimb** | Starts with random lines and nudges endpoints each round. Fast and simple. |
-| **OptGenetic** | Genetic algorithm — tournament selection, crossover, mutation. Good for exploring a wider search space. |
-| **OptStipple** | Weighted Voronoi stippling. Produces a dot pattern rather than line hatching. |
+All optimisation nodes show a live preview and progress bar while running. Parameters are tunable directly on the node card. **scoreScale** (default 0.5) controls the fraction of full resolution used for scoring — lower is faster, higher is sharper.
 
-All optimisation nodes show a live preview and progress bar while running. Parameters are tunable directly on the node card.
+---
 
-### Key parameters (all opt nodes)
+### OptStipple — weighted Voronoi stippling ✦ recommended
 
-- **lineCount** — number of strokes in the final drawing.
-- **penWidthPx** — stroke thickness in pixels at score resolution.
-- **scoreScale** — fraction of full resolution used for scoring (0.5 = 4× faster, minimal quality loss).
-- **rounds / generations / lineCount** — controls how long the algorithm runs.
+Off-the-shelf weighted Voronoi stippling via Lloyd's relaxation. Importance-samples initial dot positions from a darkness-weighted distribution, then iteratively moves each dot to the weighted centroid of its Voronoi cell. The results are consistently beautiful — dense stippling in dark areas, sparse in light ones. If you just want something that looks great with minimal fiddling, start here.
+
+**Key params:** `dotCount` (how many dots), `iterations` (more = smoother convergence), `dotRadius`, `varyRadius` (scale dot size by local darkness).
+
+---
+
+### OptGreedySequential — greedy hatching
+
+Places one short line segment at a time. For each new stroke it tests a batch of random candidates and commits whichever one reduces the error most. Scoring uses a blur-based metric: dense hatching blurs into a gray that should match the target — so the algorithm naturally packs lines into dark regions. Also uses Sobel gradients to bias new strokes along contours rather than across them.
+
+Produces good hatching-style results. More lines and more candidates = better quality but slower.
+
+**Key params:** `lineCount`, `candidates` (random strokes evaluated per step), `blurRadius`, `gradBias` (0 = random placement, 1 = fully contour-aligned).
+
+---
+
+### OptGreedyPoints — single continuous polyline ✦ good results, room to grow
+
+Grows one long continuous polyline through the image rather than placing many independent segments. Starts at the darkest pixel it can find, then at each step samples candidate next-points within a step radius, biased toward the current direction of travel. Commits the best candidate (with occasional random escapes to avoid dead ends).
+
+The single-polyline output is plottable in one pen-lift-free stroke, which is great for pen plotters. Results are already good, but the algorithm has a lot of room for further tuning — direction bias, acceptance probability, and step radius all interact in interesting ways.
+
+**Key params:** `maxPoints`, `candidates` (per step), `stepRadius` (max step length as % of diagonal), `directionBias` (0 = random walk, 1 = always go straight), `acceptanceProb` (chance of picking a random candidate instead of the best — helps escape local minima).
+
+---
+
+### OptWiggle — polyline refinement
+
+Takes an existing vector (typically from OptGreedyPoints) and refines it by wiggling interior polyline points. Each round picks a random interior vertex, tests candidate displaced positions, and commits any move that reduces blur-MAE. Pairs naturally with OptGreedyPoints as a two-stage pipeline: grow a rough polyline, then polish it.
+
+Connect: `OptGreedyPoints → OptWiggle` (OptWiggle takes both a `vector` and a grayscale `image` input).
+
+**Key params:** `rounds`, `candidates` (per wiggle), `wiggleRadius` (max displacement as % of diagonal).
+
+---
+
+### OptNeedle — experimental
+
+Uses the same blur-MAE scoring infrastructure as OptGreedySequential (save/restore region, exact local re-blur, scoreDelta). The algorithm loop is a work-in-progress — think of it as a scratchpad for new ideas. Results are already reasonable for short runs.
+
+**Key params:** `rounds`, `lineCount`, `minLenFrac` / `maxLenFrac` (stroke length range as % of diagonal).
+
+---
+
+### OptHillClimb — simple baseline
+
+Initialises `lineCount` random lines, then each round picks one and nudges both endpoints. Keeps the move if it reduces error. Fast to run and easy to understand, but the greedy and stipple approaches generally produce better output.
+
+---
+
+### OptGenetic — search-space explorer
+
+Tournament selection + uniform crossover + nudge/replace mutation + elitism. Useful when you want to explore a wider range of configurations than hill-climbing allows, at the cost of needing more tuning (population size, mutation rate, elite count all matter).
+
+**Key params:** `generations`, `popSize`, `lineCount`, `mutationRate`, `mutationAmp`, `eliteCount`, `tournamentK`.
 
 ---
 
