@@ -2,7 +2,7 @@
 
 A browser-based node graph for building image processing pipelines. The main trick: an optimisation algorithm takes a raster image and produces a generative line drawing by iteratively minimising the difference between the input and a rasterised vector image.
 
-![Example render](renders/optgreedyseq-15.png)
+![Example render](renders/optgreedyseq-11.png)
 
 ## Running it
 
