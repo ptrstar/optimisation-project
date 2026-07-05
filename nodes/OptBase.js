@@ -53,6 +53,8 @@ export class OptBase extends BaseNode {
     this.maxLenFrac    = 0.4;    // 40% of diagonal
     this.lineOpacity   = 1.0;
     this.opacityJitter = 0.0;    // half-range; 0 = fixed opacity
+
+    this.trace = [];   // convergence samples for plotting
   }
 
   // ── Shared utilities ────────────────────────────────────────────────────────
@@ -159,6 +161,27 @@ export class OptBase extends BaseNode {
     for (let i = 0; i < n; i++) total += Math.abs(rendered[i] - target.data[i * 4]);
     return n > 0 ? total / n : 0;
   }
+
+  // ── Convergence tracking (for plots) ────────────────────────────────────────
+// Usage in run(): _resetTrace() at the start, _recordTrace(evals, best, extra)
+// at each sample, _dumpTraceCSV() at the end. `evals` = cumulative fitness
+// evaluations so curves from per-round (SA) and per-generation (GA/ES)
+// algorithms share a comparable x-axis.
+_resetTrace() {
+  this.trace = [];
+}
+
+_recordTrace(evals, best, extra = {}) {
+  this.trace.push({ evals, best, ...extra });
+}
+
+_dumpTraceCSV(label = this.id) {
+  if (!this.trace || this.trace.length === 0) return '';
+  const cols = Object.keys(this.trace[0]);
+  const csv  = [cols.join(','), ...this.trace.map(r => cols.map(c => r[c]).join(','))].join('\n');
+  console.log(`#TRACE ${label}\n${csv}`);
+  return csv;
+}
 
   // ── Serialisation — auto-derived from paramDefs ─────────────────────────────
 

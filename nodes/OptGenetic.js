@@ -94,6 +94,8 @@ export class OptGenetic extends OptBase {
     let pop  = Array.from({ length: this.popSize }, () => this._randomInd(W, H, diag));
     let fits = new Float32Array(this.popSize);
     for (let i = 0; i < this.popSize; i++) fits[i] = evalScore(pop[i]);
+    let evals = this.popSize;
+    this._resetTrace();
 
     // ── Main loop ──────────────────────────────────────────────────────────────
     const lc = this.lineCount;
@@ -168,10 +170,13 @@ export class OptGenetic extends OptBase {
       pop  = nextPop;
       fits = nextFits;
 
+      evals += (this.popSize - elite);
+
       // Progress + preview every 5 generations
       if (gen % 5 === 0) {
         let bestIdx = 0;
         for (let i = 1; i < this.popSize; i++) if (fits[i] < fits[bestIdx]) bestIdx = i;
+        this._recordTrace(evals, fits[bestIdx], { gen });
         this.onProgress?.(gen / this.generations, fits[bestIdx]);
         this.onPreview?.(this._rasterizeGS(pop[bestIdx]), W, H);
         await new Promise(r => setTimeout(r, 0));
@@ -181,6 +186,8 @@ export class OptGenetic extends OptBase {
     // Final best
     let bestIdx = 0;
     for (let i = 1; i < this.popSize; i++) if (fits[i] < fits[bestIdx]) bestIdx = i;
+    this._recordTrace(evals, fits[bestIdx], { gen: this.generations });
+    this._dumpTraceCSV();
     this.onProgress?.(1, fits[bestIdx]);
     this.onPreview?.(this._rasterizeGS(pop[bestIdx]), W, H);
 

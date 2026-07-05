@@ -70,6 +70,7 @@ export class OptHillClimb extends OptBase {
       vector.addLine(points, style);
     }
     let currentScore = evalScore(vector.lines);
+    this._resetTrace();
 
     // ── Hill-climb ────────────────────────────────────────────────────────────
     for (let i = 0; i < this.rounds; i++) {
@@ -97,12 +98,15 @@ export class OptHillClimb extends OptBase {
       }
 
       if (i % 20 === 0) {
+        this._recordTrace(i, currentScore);
         this.onProgress?.(i / this.rounds, currentScore);
         if (i % 100 === 0) this.onPreview?.(this._rasterizeGS(vector), W, H);
         await new Promise(r => setTimeout(r, 0));
       }
     }
 
+    this._recordTrace(this.rounds, currentScore);
+    this._dumpTraceCSV();
     this.onProgress?.(1, currentScore);
     this.onPreview?.(this._rasterizeGS(vector), W, H);
 
