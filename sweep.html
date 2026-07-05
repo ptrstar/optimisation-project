@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parameter Sweep — optimisation methods</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 24px auto; max-width: 760px; color: #1f2937; line-height: 1.5; }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    p.sub { color: #6b7280; margin-top: 0; }
+    .controls { display: flex; gap: 12px; align-items: center; margin: 18px 0; flex-wrap: wrap; }
+    button { padding: 8px 16px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font-size: 14px; cursor: pointer; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    #status { font-family: ui-monospace, monospace; font-size: 13px; color: #374151; background: #f3f4f6; border-radius: 6px; padding: 10px 12px; min-height: 20px; }
+    #downloads { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+    a.dl { font-family: ui-monospace, monospace; font-size: 14px; color: #2563eb; text-decoration: none; }
+    a.dl:hover { text-decoration: underline; }
+    code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Parameter Sweep</h1>
+  <p class="sub">Tunes Hill-Climb, Genetic, Simulated Annealing, Evolution Strategy and Greedy-Sequential on a common MAE metric, then exports the data and the best parameters per method.</p>
+
+  <div class="controls">
+    <input type="file" id="file" accept="image/*">
+    <button id="run" disabled>Run sweep</button>
+  </div>
+
+  <div id="status">Pick an image to begin. Edit <code>CONFIG</code> at the top of sweep.js to change repeats, image size, or which values are swept.</div>
+  <div id="downloads"></div>
+
+  <script type="module" src="./sweep.js"></script>
+</body>
+</html>

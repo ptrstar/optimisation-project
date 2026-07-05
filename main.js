@@ -4,12 +4,15 @@ import { ImageUploader }   from './nodes/ImageUploader.js';
 import { Grayscale }       from './nodes/Grayscale.js';
 import { Contrast }        from './nodes/Contrast.js';
 import { ShowPixelBuffer } from './nodes/ShowPixelBuffer.js';
+import { OptRandomSearch } from './nodes/OptRandomSearch.js';
 import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { OptGreedyPoints }      from './nodes/OptGreedyPoints.js';
 import { OptWiggle }            from './nodes/OptWiggle.js';
+import { OptSimAnneal }         from './nodes/OptSimAnneal.js';
+import { OptEvoStrategy }       from './nodes/OptEvoStrategy.js';
 import { InvertImage }          from './nodes/InvertImage.js';
 import { OptStipple }           from './nodes/OptStipple.js';
 import { Rasterize }       from './nodes/Rasterize.js';
@@ -24,12 +27,15 @@ const NODE_REGISTRY = [
   { label: 'Grayscale',       cls: Grayscale        },
   { label: 'Contrast',        cls: Contrast         },
   { label: 'Show Buffer',     cls: ShowPixelBuffer  },
+  { label: 'Opt: Random Search',     cls: OptRandomSearch     },
   { label: 'Opt: Hill Climb',        cls: OptHillClimb        },
   { label: 'Opt: Genetic',           cls: OptGenetic          },
-  { label: 'Opt: Needle',             cls: OptNeedle           },
+  { label: 'Opt: Needle',            cls: OptNeedle           },
   { label: 'Opt: Greedy Sequential', cls: OptGreedySequential },
   { label: 'Opt: Greedy Points',     cls: OptGreedyPoints     },
   { label: 'Opt: Wiggle',            cls: OptWiggle           },
+  { label: 'Opt: Sim Anneal',        cls: OptSimAnneal        },
+  { label: 'Opt: Evo Strategy',      cls: OptEvoStrategy      },
   { label: 'Invert Image',           cls: InvertImage         },
   { label: 'Opt: Stipple',           cls: OptStipple          },
   { label: 'Rasterize',       cls: Rasterize        },
@@ -49,6 +55,7 @@ const graphContainer  = document.getElementById('graph-container');
 const viewportEl      = document.getElementById('viewport');
 
 const pipeline = new Pipeline(canvasEl, graphEl);
+window.pipeline = pipeline;
 
 // ── Canvas panning ────────────────────────────────────────────────────────────
 let panX = 0, panY = 0, isPanning = false, panStartX = 0, panStartY = 0;

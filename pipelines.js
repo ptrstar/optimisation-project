@@ -9,12 +9,15 @@ import { ImageUploader }        from './nodes/ImageUploader.js';
 import { Grayscale }            from './nodes/Grayscale.js';
 import { Contrast }             from './nodes/Contrast.js';
 import { ShowPixelBuffer }      from './nodes/ShowPixelBuffer.js';
+import { OptRandomSearch } from './nodes/OptRandomSearch.js';
 import { OptHillClimb }         from './nodes/OptHillClimb.js';
 import { OptGenetic }           from './nodes/OptGenetic.js';
 import { OptNeedle }            from './nodes/OptNeedle.js';
 import { OptGreedySequential }  from './nodes/OptGreedySequential.js';
 import { OptGreedyPoints }      from './nodes/OptGreedyPoints.js';
 import { OptWiggle }            from './nodes/OptWiggle.js';
+import { OptSimAnneal }         from './nodes/OptSimAnneal.js';
+import { OptEvoStrategy }       from './nodes/OptEvoStrategy.js';
 import { Rasterize }            from './nodes/Rasterize.js';
 import { ImageDiff }            from './nodes/ImageDiff.js';
 import { CanvasSetup }          from './nodes/CanvasSetup.js';
@@ -30,12 +33,15 @@ const NODE_CLASSES = {
   Grayscale,
   Contrast,
   ShowPixelBuffer,
+  OptRandomSearch,
   OptHillClimb,
   OptGenetic,
   OptNeedle,
   OptGreedySequential,
   OptGreedyPoints,
   OptWiggle,
+  OptSimAnneal,
+  OptEvoStrategy,
   Rasterize,
   ImageDiff,
   CanvasSetup,
@@ -118,6 +124,7 @@ export function loadPreset(pipeline, preset) {
 // ── Presets ────────────────────────────────────────────────────────────────
 
 // Shared node layout used by all opt presets — only the opt node type/params differ.
+
 const _optPresetNodes = (optId, optType, optParams) => ([
   { id: 'canvassetup-0',   type: 'CanvasSetup',     x: 40,   y: 40,  params: { widthCm: 20, heightCm: 20, dpi: 96, penWidthMm: 0.7 } },
   { id: 'imageuploader-1', type: 'ImageUploader',   x: 40,   y: 260, params: { fitMode: 'fit' } },
@@ -138,6 +145,13 @@ const _optPresetEdges = (optId) => ([
   { from: optId,             fromPort: 'vector', to: 'rasterize-6',     toPort: 'vector' },
   { from: 'rasterize-6',     fromPort: 'image',  to: 'showbuffer-7',    toPort: 'image'  },
 ]);
+
+const PRESET_RANDOM_SEARCH = {
+  nodes: _optPresetNodes('opt-5', 'OptRandomSearch', {
+    rounds: 2000, lineCount: 200, penWidthPx: 2, scoreScale: 0.5,
+  }),
+  edges: _optPresetEdges('opt-5'),
+};
 
 const PRESET_HILL_CLIMB = {
   nodes: _optPresetNodes('opt-5', 'OptHillClimb', {
@@ -203,6 +217,22 @@ const PRESET_GREEDY_POINTS_WIGGLE = {
   ],
 };
 
+const PRESET_SIM_ANNEAL = {
+  nodes: _optPresetNodes('opt-5', 'OptSimAnneal', {
+    rounds: 40000, lineCount: 200, penWidthPx: 2, maxAmplitude: 40,
+    initialTemp: 2.0, finalTemp: 0.01, autoInitTemp: 1, scoreScale: 0.2,
+  }),
+  edges: _optPresetEdges('opt-5'),
+};
+
+const PRESET_EVO_STRATEGY = {
+  nodes: _optPresetNodes('opt-5', 'OptEvoStrategy', {
+    generations: 200, mu: 10, lambda: 50, lineCount: 100, penWidthPx: 2,
+    sigmaInit: 20, plusSelection: 1, recombine: 1, scoreScale: 0.5,
+  }),
+  edges: _optPresetEdges('opt-5'),
+};
+
 // ── Compare-all preset ──────────────────────────────────────────────────────
 // Top row: full preprocessing chain (CanvasSetup → Grayscale → ShowPixelBuffer).
 // Below it, one unconnected Opt → Rasterize → ShowPixelBuffer chain per algorithm,
@@ -238,10 +268,13 @@ const PRESET_COMPARE = (() => {
       { id: 'gs-3',  type: 'Grayscale',       x: OPT_X,y: TOP_Y, params: {} },
       { id: 'sb-top',type: 'ShowPixelBuffer', x: 1000, y: TOP_Y, params: {} },
       // Opt chains (unconnected on input — user draws one edge from gs-3 to activate)
-      ...optRow(0, 'hc',  'OptHillClimb',        { rounds: 2000, lineCount: 200, penWidthPx: 2, maxAmplitude: 15, scoreScale: 0.5 }),
-      ...optRow(1, 'gen', 'OptGenetic',           { generations: 300, popSize: 30, lineCount: 100, penWidthPx: 2, mutationRate: 0.05, mutationAmp: 20, eliteCount: 2, tournamentK: 3, scoreScale: 0.5 }),
-      ...optRow(2, 'gr',  'OptGreedySequential',  { lineCount: 150, candidates: 400, penWidthPx: 2, scoreScale: 0.5, maxLenFrac: 0.4, lineOpacity: 0.8, blurRadius: 8, blurMix: 0.4 }),
-      ...optRow(3, 'st',  'OptStipple',           { dotCount: 300, iterations: 20, dotRadius: 3, varyRadius: 0.5, scoreScale: 0.2 }),
+      ...optRow(0, 'rs',  'OptRandomSearch',      { rounds: 2000, lineCount: 1000, penWidthPx: 2, scoreScale: 0.2 }),
+      ...optRow(1, 'hc',  'OptHillClimb',         { rounds: 2000, lineCount: 1000, penWidthPx: 2, maxAmplitude: 15, scoreScale: 0.2 }),
+      ...optRow(2, 'sa',  'OptSimAnneal',         { rounds: 8000, lineCount: 1000, penWidthPx: 2, maxAmplitude: 15, initialTemp: 2.0, finalTemp: 0.01, autoInitTemp: 1, scoreScale: 0.2 }),
+      ...optRow(3, 'gen', 'OptGenetic',           { generations: 300, popSize: 30, lineCount: 1000, penWidthPx: 2, mutationRate: 0.05, mutationAmp: 20, eliteCount: 2, tournamentK: 3, scoreScale: 0.2 }),
+      ...optRow(4, 'es',  'OptEvoStrategy',       { generations: 200, mu: 10, lambda: 50, lineCount: 1000, penWidthPx: 2, sigmaInit: 20, plusSelection: 1, recombine: 1, scoreScale: 0.2 }),
+      ...optRow(5, 'gr',  'OptGreedySequential',  { lineCount: 1000, candidates: 400, penWidthPx: 2, scoreScale: 0.2, maxLenFrac: 0.4, lineOpacity: 0.8, blurRadius: 8, blurMix: 0.4 }),
+      ...optRow(6, 'st',  'OptStipple',           { dotCount: 1000, iterations: 20, dotRadius: 3, varyRadius: 0.5, scoreScale: 0.2 }),
     ],
     edges: [
       // Top chain
@@ -250,8 +283,11 @@ const PRESET_COMPARE = (() => {
       { from: 'co-2',  fromPort: 'image',  to: 'gs-3',  toPort: 'image'  },
       { from: 'gs-3',  fromPort: 'image',  to: 'sb-top',toPort: 'image'  },
       // Within each opt chain
+      ...optEdges('rs'),
       ...optEdges('hc'),
+      ...optEdges('sa'),
       ...optEdges('gen'),
+      ...optEdges('es'),
       ...optEdges('gr'),
       ...optEdges('st'),
     ],
@@ -259,6 +295,7 @@ const PRESET_COMPARE = (() => {
 })();
 
 export const PRESETS = [
+  { name: 'Random Search', pipeline: PRESET_RANDOM_SEARCH },
   { name: 'Hill Climb',        pipeline: PRESET_HILL_CLIMB },
   { name: 'Genetic',           pipeline: PRESET_GENETIC    },
   { name: 'Greedy Sequential', pipeline: PRESET_GREEDY     },
@@ -266,4 +303,6 @@ export const PRESETS = [
   { name: 'Needle',            pipeline: PRESET_NEEDLE     },
   { name: 'Greedy Points + Wiggle', pipeline: PRESET_GREEDY_POINTS_WIGGLE },
   { name: 'Compare All',            pipeline: PRESET_COMPARE    },
+  { name: 'Simulated Annealing', pipeline: PRESET_SIM_ANNEAL },
+  { name: 'Evolution Strategy', pipeline: PRESET_EVO_STRATEGY },
 ];
